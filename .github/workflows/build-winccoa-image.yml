@@ -26,7 +26,7 @@ jobs:
       DOCKER_NAMESPACE: ${{ github.event.inputs.docker_namespace != '' && github.event.inputs.docker_namespace || github.repository_owner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       
 
