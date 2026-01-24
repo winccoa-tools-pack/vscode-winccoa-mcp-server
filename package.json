@@ -578,7 +578,7 @@
     "@vscode/vsce": "^3.7.1",
     "@winccoa-tools-pack/npm-winccoa-core": "^0.1.1",
     "chai": "^6.2.2",
-    "eslint": "^8.50.0",
+    "eslint": "^9.39.2",
     "glob": "^13.0.0",
     "markdownlint-cli": "^0.36.0",
     "mocha": "^11.7.5",
