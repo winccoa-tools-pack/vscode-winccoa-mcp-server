@@ -573,7 +573,7 @@
     "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.80.0",
     "@typescript-eslint/eslint-plugin": "^6.10.0",
-    "@typescript-eslint/parser": "^6.10.0",
+    "@typescript-eslint/parser": "^8.53.1",
     "@vscode/test-electron": "^2.3.9",
     "@vscode/vsce": "^3.7.1",
     "@winccoa-tools-pack/npm-winccoa-core": "^0.1.1",
