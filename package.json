@@ -693,7 +693,7 @@
     "vscode-test": "^1.6.1"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "simple-git": "^3.30.0"
   }
 }
