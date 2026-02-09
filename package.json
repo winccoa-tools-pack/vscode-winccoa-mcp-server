@@ -680,7 +680,7 @@
     "@typescript-eslint/parser": "^6.10.0",
     "@vscode/test-electron": "^2.3.9",
     "@vscode/vsce": "^3.7.1",
-    "@winccoa-tools-pack/npm-winccoa-core": "^0.1.1",
+    "@winccoa-tools-pack/npm-winccoa-core": "^0.2.3",
     "chai": "^6.2.2",
     "eslint": "^8.50.0",
     "glob": "^13.0.0",
