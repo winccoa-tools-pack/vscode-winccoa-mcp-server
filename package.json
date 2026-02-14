@@ -692,7 +692,7 @@
     "vscode-test": "^1.6.1"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@winccoa-tools-pack/npm-winccoa-core": "^0.2.3",
     "simple-git": "^3.30.0"
   }
