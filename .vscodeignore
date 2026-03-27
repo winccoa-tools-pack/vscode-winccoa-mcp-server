@@ -1,0 +1,22 @@
+# Source & tests (compiled output in dist/ is what runs)
+src/
+test/
+dist/test/
+tsconfig.json
+
+# Dev & CI tooling
+.claude/
+.github/
+.gitflow
+.gitignore
+.markdownlint.json
+Makefile
+scripts/
+docker/
+docs/
+bin/
+DevEnv.code-workspace
+FUNDING.yml
+GIT_INSTALL_DEVELOPMENT_LOG.md
+SECURITY.md
+TEST_PROMPTS.md
