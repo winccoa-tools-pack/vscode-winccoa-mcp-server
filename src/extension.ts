@@ -1,6 +1,6 @@
 /**
  * WinCC OA MCP Server Extension
- *
+ * 
  * VS Code extension for managing WinCC OA MCP Server.
  * Provides auto-detection, setup wizard, and GitHub Copilot integration.
  */
@@ -13,6 +13,7 @@ import { LanguageModelTools } from './languageModelTools';
 import { ProjectConfigDetector, McpConfig } from './projectConfigDetector';
 import { SetupWizard } from './setupWizard';
 import { ConnectionMonitor } from './connectionMonitor';
+import { McpConnectionInfo, McpServerExtensionApi } from './extensionApi';
 
 // Global persistent client
 let mcpClient: McpClient | null = null;
@@ -21,6 +22,9 @@ let currentConfig: McpConfig | null = null;
 // Connection Monitor
 let connectionMonitor: ConnectionMonitor | null = null;
 
+// Extension API event emitter
+const connectionChangeEmitter = new vscode.EventEmitter<McpConnectionInfo | null>();
+
 let statusBar: StatusBarManager;
 let languageModelTools: LanguageModelTools;
 let configDetector: ProjectConfigDetector;
@@ -28,7 +32,7 @@ let configDetector: ProjectConfigDetector;
 /**
  * Extension activation
  */
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<McpServerExtensionApi> {
     ExtensionOutputChannel.info('WinCC OA MCP Server Extension activating...');
 
     // Initialize Config Detector
@@ -46,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     try {
         ExtensionOutputChannel.info('Auto-detecting MCP configuration...');
         const { config, error } = await configDetector.detectConfig();
-
+        
         if (!config) {
             // Check if auto-setup should run
             await handleDetectionError(error);
@@ -55,23 +59,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             ExtensionOutputChannel.info(`Connecting to MCP Server: ${config.url}`);
             await createClient(config);
             statusBar.setStatus('connected');
-            ExtensionOutputChannel.info(
-                `✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`,
-            );
+            ExtensionOutputChannel.info(`✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`);
         }
     } catch (error: any) {
         ExtensionOutputChannel.error(`Auto-connect failed: ${error.message}`);
         statusBar.setStatus('error');
-        vscode.window
-            .showWarningMessage(
-                'WinCC OA MCP Server not reachable. Click status bar to retry.',
-                'Show Logs',
-            )
-            .then((selection) => {
-                if (selection === 'Show Logs') {
-                    ExtensionOutputChannel.show();
-                }
-            });
+        vscode.window.showWarningMessage(
+            'WinCC OA MCP Server not reachable. Click status bar to retry.',
+            'Show Logs'
+        ).then(selection => {
+            if (selection === 'Show Logs') {
+                ExtensionOutputChannel.show();
+            }
+        });
     }
 
     // Subscribe to Project Admin project changes
@@ -84,15 +84,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.commands.registerCommand('winccoa.mcp.disconnect', disconnect),
         vscode.commands.registerCommand('winccoa.mcp.reconnect', reconnect),
         vscode.commands.registerCommand('winccoa.mcp.showInfo', showServerInfo),
-        vscode.commands.registerCommand('winccoa.mcp.showOutput', () =>
-            ExtensionOutputChannel.show(),
-        ),
+        vscode.commands.registerCommand('winccoa.mcp.showOutput', () => ExtensionOutputChannel.show()),
         vscode.commands.registerCommand('winccoa.mcp.executeScript', executeScript),
         vscode.commands.registerCommand('winccoa.mcp.runSetup', runSetup),
-        vscode.commands.registerCommand('winccoa.mcp.resetAndReinstall', resetAndReinstall),
+        vscode.commands.registerCommand('winccoa.mcp.resetAndReinstall', resetAndReinstall)
     );
 
+    // Watch .env file for changes (port, token, host edits)
+    const envWatcher = vscode.workspace.createFileSystemWatcher('**/javascript/mcpServer/.env');
+    envWatcher.onDidChange(async () => {
+        ExtensionOutputChannel.info('.env file changed — re-detecting MCP config...');
+        configDetector.invalidateCache();
+        const { config } = await configDetector.detectConfig();
+        if (config) {
+            await createClient(config);
+            statusBar.setStatus('connected');
+            ExtensionOutputChannel.info(`✅ Reconnected with updated .env: ${config.url}`);
+        }
+    });
+    context.subscriptions.push(envWatcher, connectionChangeEmitter);
+
+    // Build and return the public extension API
+    const api: McpServerExtensionApi = {
+        getConnectionInfo: () => buildConnectionInfo(),
+        getConnectionState: () => {
+            if (mcpClient && currentConfig) { return 'connected'; }
+            return 'disconnected';
+        },
+        onDidChangeConnection: connectionChangeEmitter.event,
+    };
+
     ExtensionOutputChannel.info('WinCC OA MCP Server Extension activated ✅');
+    return api;
 }
 
 /**
@@ -100,14 +123,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
  */
 export async function deactivate(): Promise<void> {
     ExtensionOutputChannel.info('WinCC OA MCP Server Extension deactivating...');
-
+    
     // Stop connection monitor
     if (connectionMonitor) {
         connectionMonitor.stop();
     }
-
+    
     await disposeClient();
     ExtensionOutputChannel.info('WinCC OA MCP Server Extension deactivated');
+}
+
+/**
+ * Build connection info from current config for the public API
+ */
+function buildConnectionInfo(): McpConnectionInfo | null {
+    if (!currentConfig) { return null; }
+    return {
+        url: currentConfig.url,
+        token: currentConfig.token,
+        authType: currentConfig.authType,
+        projectName: currentConfig.projectName,
+        projectPath: currentConfig.projectPath,
+    };
 }
 
 /**
@@ -133,6 +170,9 @@ async function createClient(config: McpConfig): Promise<McpClient> {
     // Start connection monitoring
     startConnectionMonitor();
 
+    // Notify consumers of new connection
+    connectionChangeEmitter.fire(buildConnectionInfo());
+
     ExtensionOutputChannel.info('✅ MCP Client created and initialized');
     return client;
 }
@@ -144,15 +184,15 @@ async function disposeClient(): Promise<void> {
     if (!mcpClient) {
         return;
     }
-
+    
     ExtensionOutputChannel.info('Disposing MCP client...');
-
+    
     // Stop connection monitor
     if (connectionMonitor) {
         connectionMonitor.stop();
         connectionMonitor = null;
     }
-
+    
     try {
         // Client might have dispose/close method in future
         mcpClient = null;
@@ -160,6 +200,9 @@ async function disposeClient(): Promise<void> {
 
         // Update components
         languageModelTools.updateClient(null);
+
+        // Notify consumers of disconnection
+        connectionChangeEmitter.fire(null);
 
         ExtensionOutputChannel.info('MCP client disposed');
     } catch (error: any) {
@@ -196,7 +239,7 @@ function startConnectionMonitor(): void {
 
     ExtensionOutputChannel.debug(
         `Connection Monitor Config: interval=${heartbeatInterval}ms, ` +
-            `retries=${reconnectRetries}, autoReconnect=${autoReconnect}`,
+        `retries=${reconnectRetries}, autoReconnect=${autoReconnect}`
     );
 
     // Create new monitor with user settings
@@ -204,12 +247,12 @@ function startConnectionMonitor(): void {
         {
             heartbeatInterval,
             reconnectRetries,
-            autoReconnect,
+            autoReconnect
         },
         getClient,
         handleConnectionLost,
         handleReconnectSuccess,
-        handleReconnectFailed,
+        handleReconnectFailed
     );
 
     connectionMonitor.start();
@@ -221,8 +264,7 @@ function startConnectionMonitor(): void {
 async function handleConnectionLost(): Promise<void> {
     ExtensionOutputChannel.warn('⚠️ Connection lost to MCP Server');
     statusBar.setStatus('error', 'Connection lost');
-
-    // Don't show notification here - wait for auto-reconnect result
+    connectionChangeEmitter.fire(null);
 }
 
 /**
@@ -231,12 +273,15 @@ async function handleConnectionLost(): Promise<void> {
 function handleReconnectSuccess(): void {
     ExtensionOutputChannel.info('✅ Auto-reconnect successful');
     statusBar.setStatus('connected');
+    connectionChangeEmitter.fire(buildConnectionInfo());
 
     const config = vscode.workspace.getConfiguration('winccoa.mcp');
     const showNotifications = config.get<boolean>('showNotifications', true);
-
+    
     if (showNotifications) {
-        vscode.window.showInformationMessage('MCP Server connection restored automatically');
+        vscode.window.showInformationMessage(
+            'MCP Server connection restored automatically'
+        );
     }
 }
 
@@ -246,24 +291,22 @@ function handleReconnectSuccess(): void {
 function handleReconnectFailed(): void {
     ExtensionOutputChannel.error('❌ Auto-reconnect failed after maximum retries');
     statusBar.setStatus('error', 'Reconnect failed');
-
+    
     const config = vscode.workspace.getConfiguration('winccoa.mcp');
     const showNotifications = config.get<boolean>('showNotifications', true);
-
+    
     if (showNotifications) {
-        vscode.window
-            .showErrorMessage(
-                'MCP Server connection lost. Click to reconnect.',
-                'Reconnect',
-                'Show Logs',
-            )
-            .then((selection) => {
-                if (selection === 'Reconnect') {
-                    vscode.commands.executeCommand('winccoa.mcp.reconnect');
-                } else if (selection === 'Show Logs') {
-                    ExtensionOutputChannel.show();
-                }
-            });
+        vscode.window.showErrorMessage(
+            'MCP Server connection lost. Click to reconnect.',
+            'Reconnect',
+            'Show Logs'
+        ).then(selection => {
+            if (selection === 'Reconnect') {
+                vscode.commands.executeCommand('winccoa.mcp.reconnect');
+            } else if (selection === 'Show Logs') {
+                ExtensionOutputChannel.show();
+            }
+        });
     }
 }
 
@@ -273,53 +316,53 @@ function handleReconnectFailed(): void {
 async function showMenu(): Promise<void> {
     const isConnected = mcpClient !== null;
     const status = statusBar.getCurrentStatus();
-
+    
     // Build context-sensitive menu items
     const items: vscode.QuickPickItem[] = [];
-
+    
     if (isConnected) {
         items.push(
             {
                 label: '$(info) Show Server Info',
                 description: 'Display server details',
-                detail: 'Shows server version and available tools',
+                detail: 'Shows server version and available tools'
             },
             {
                 label: '$(debug-disconnect) Disconnect',
                 description: 'Disconnect from MCP Server',
-                detail: 'Stop MCP Server connection',
+                detail: 'Stop MCP Server connection'
             },
             {
                 label: '$(sync) Reconnect',
                 description: 'Reconnect to MCP Server',
-                detail: 'Force reconnection',
-            },
+                detail: 'Force reconnection'
+            }
         );
     } else {
         items.push(
             {
                 label: '$(plug) Connect',
                 description: 'Connect to MCP Server',
-                detail: 'Establish connection to MCP Server',
+                detail: 'Establish connection to MCP Server'
             },
             {
                 label: '$(tools) Run Setup',
                 description: 'Install MCP Server',
-                detail: 'Setup MCP Server in WinCC OA project',
-            },
+                detail: 'Setup MCP Server in WinCC OA project'
+            }
         );
     }
-
+    
     // Always show logs
     items.push({
         label: '$(output) Show Logs',
         description: 'Open extension output',
-        detail: 'View debug logs and messages',
+        detail: 'View debug logs and messages'
     });
 
     const selected = await vscode.window.showQuickPick(items, {
         placeHolder: `MCP Server Actions (${isConnected ? 'Connected' : 'Disconnected'})`,
-        title: 'WinCC OA MCP Server',
+        title: 'WinCC OA MCP Server'
     });
 
     if (!selected) {
@@ -357,7 +400,7 @@ async function showServerInfo(): Promise<void> {
         }
 
         const config = currentConfig;
-
+        
         const initResult = await client.initialize();
         const tools = await client.listTools();
         const resources = await client.listResources();
@@ -369,46 +412,46 @@ async function showServerInfo(): Promise<void> {
         const items: vscode.QuickPickItem[] = [
             {
                 label: '$(server) Server Information',
-                kind: vscode.QuickPickItemKind.Separator,
+                kind: vscode.QuickPickItemKind.Separator
             },
             {
                 label: '$(project) Project',
                 description: config.projectName || 'Unknown',
-                detail: `WinCC OA Project`,
+                detail: `WinCC OA Project`
             },
             {
                 label: '$(server-process) Server',
                 description: `${initResult.serverInfo.name} ${initResult.serverInfo.version}`,
-                detail: `MCP Server Implementation`,
+                detail: `MCP Server Implementation`
             },
             {
                 label: '$(plug) Protocol',
                 description: initResult.protocolVersion,
-                detail: `Model Context Protocol Version`,
+                detail: `Model Context Protocol Version`
             },
             {
                 label: '$(globe) URL',
                 description: config.url,
-                detail: `MCP Server Endpoint`,
+                detail: `MCP Server Endpoint`
             },
             {
                 label: '$(tools) Available Tools',
-                kind: vscode.QuickPickItemKind.Separator,
+                kind: vscode.QuickPickItemKind.Separator
             },
-            ...tools.map((t) => ({
+            ...tools.map(t => ({
                 label: `$(symbol-method) ${t.name}`,
                 description: t.description?.split('\n')[0] || '',
-                detail: t.description?.split('\n').slice(1).join(' ') || 'No description',
+                detail: t.description?.split('\n').slice(1).join(' ') || 'No description'
             })),
             {
                 label: '$(folder) Available Resources',
-                kind: vscode.QuickPickItemKind.Separator,
+                kind: vscode.QuickPickItemKind.Separator
             },
-            ...resources.map((r) => ({
+            ...resources.map(r => ({
                 label: `$(file) ${r.name || r.uri}`,
                 description: r.uri,
-                detail: r.description || r.mimeType || 'No description',
-            })),
+                detail: r.description || r.mimeType || 'No description'
+            }))
         ];
 
         // Show QuickPick (non-interactive, just for display)
@@ -416,10 +459,11 @@ async function showServerInfo(): Promise<void> {
             title: `$(wand) WinCC OA MCP Server - ${config.projectName || 'Unknown'}`,
             placeHolder: `${tools.length} tools, ${resources.length} resources available`,
             matchOnDescription: true,
-            matchOnDetail: true,
+            matchOnDetail: true
         });
 
         ExtensionOutputChannel.info('Server info retrieved successfully');
+
     } catch (error: any) {
         statusBar.setStatus('error', 'Connection failed');
         ExtensionOutputChannel.error(`showServerInfo error: ${error.message}`);
@@ -432,11 +476,9 @@ async function showServerInfo(): Promise<void> {
  */
 async function subscribeToProjectChanges(context: vscode.ExtensionContext): Promise<void> {
     const projectAdmin = vscode.extensions.getExtension('RichardJanisch.winccoa-project-admin');
-
+    
     if (!projectAdmin) {
-        ExtensionOutputChannel.debug(
-            'Project Admin not found - skipping project change subscription',
-        );
+        ExtensionOutputChannel.debug('Project Admin not found - skipping project change subscription');
         return;
     }
 
@@ -453,10 +495,10 @@ async function subscribeToProjectChanges(context: vscode.ExtensionContext): Prom
     // Subscribe to project changes
     api.onDidChangeProject(async (project: any) => {
         ExtensionOutputChannel.info('Project changed - reconnecting MCP Server...');
-
+        
         // Invalidate config cache
         configDetector.invalidateCache();
-
+        
         if (!project) {
             ExtensionOutputChannel.debug('No project selected');
             statusBar.setStatus('disconnected');
@@ -469,7 +511,7 @@ async function subscribeToProjectChanges(context: vscode.ExtensionContext): Prom
         // Reconnect to MCP Server with new project config
         try {
             const { config, error } = await configDetector.detectConfig();
-
+            
             if (!config) {
                 // Dispose old client when switching to project without MCP
                 await disposeClient();
@@ -485,8 +527,9 @@ async function subscribeToProjectChanges(context: vscode.ExtensionContext): Prom
             ExtensionOutputChannel.info(`✅ Connected to ${config.projectName} MCP Server`);
 
             vscode.window.showInformationMessage(
-                `Switched to ${config.projectName} - MCP Server reconnected`,
+                `Switched to ${config.projectName} - MCP Server reconnected`
             );
+
         } catch (error: any) {
             ExtensionOutputChannel.error(`Failed to reconnect: ${error.message}`);
             statusBar.setStatus('error');
@@ -506,15 +549,15 @@ async function getMcpConfig(): Promise<McpConfig | null> {
     if (mcpClient && currentConfig) {
         return currentConfig;
     }
-
+    
     // Otherwise detect config
     const { config, error } = await configDetector.detectConfig();
-
+    
     if (!config) {
         handleDetectionError(error);
         return null;
     }
-
+    
     return config;
 }
 
@@ -524,20 +567,16 @@ async function getMcpConfig(): Promise<McpConfig | null> {
 async function handleDetectionError(error?: string): Promise<void> {
     switch (error) {
         case 'project-admin-missing':
-            vscode.window
-                .showWarningMessage(
-                    'WinCC OA Project Admin Extension required for auto-configuration',
-                    'Learn More',
-                )
-                .then((selection) => {
-                    if (selection === 'Learn More') {
-                        vscode.env.openExternal(
-                            vscode.Uri.parse(
-                                'https://marketplace.visualstudio.com/items?itemName=RichardJanisch.winccoa-project-admin',
-                            ),
-                        );
-                    }
-                });
+            vscode.window.showWarningMessage(
+                'WinCC OA Project Admin Extension required for auto-configuration',
+                'Learn More'
+            ).then(selection => {
+                if (selection === 'Learn More') {
+                    vscode.env.openExternal(vscode.Uri.parse(
+                        'https://marketplace.visualstudio.com/items?itemName=RichardJanisch.winccoa-project-admin'
+                    ));
+                }
+            });
             break;
 
         case 'no-project-selected':
@@ -548,24 +587,22 @@ async function handleDetectionError(error?: string): Promise<void> {
         case 'mcp-not-installed':
         case 'env-file-missing':
             // Offer auto-setup wizard
-            vscode.window
-                .showWarningMessage(
-                    'MCP Server not found in current project',
-                    'Run Setup Wizard',
-                    'Manual Config',
-                )
-                .then(async (selection) => {
-                    if (selection === 'Run Setup Wizard') {
-                        await vscode.commands.executeCommand('winccoa.mcp.runSetup');
-                    } else if (selection === 'Manual Config') {
-                        ExtensionOutputChannel.show();
-                    }
-                });
+            vscode.window.showWarningMessage(
+                'MCP Server not found in current project',
+                'Run Setup Wizard',
+                'Manual Config'
+            ).then(async selection => {
+                if (selection === 'Run Setup Wizard') {
+                    await vscode.commands.executeCommand('winccoa.mcp.runSetup');
+                } else if (selection === 'Manual Config') {
+                    ExtensionOutputChannel.show();
+                }
+            });
             break;
 
         case 'token-missing':
             vscode.window.showErrorMessage(
-                'MCP_API_TOKEN not found in .env file. Please check your MCP Server installation.',
+                'MCP_API_TOKEN not found in .env file. Please check your MCP Server installation.'
             );
             break;
 
@@ -581,48 +618,48 @@ async function connect(): Promise<void> {
     try {
         // If already connected, show info
         if (mcpClient) {
-            vscode.window
-                .showInformationMessage('Already connected to MCP Server', 'Show Info', 'Reconnect')
-                .then((selection) => {
-                    if (selection === 'Show Info') {
-                        vscode.commands.executeCommand('winccoa.mcp.showInfo');
-                    } else if (selection === 'Reconnect') {
-                        vscode.commands.executeCommand('winccoa.mcp.reconnect');
-                    }
-                });
+            vscode.window.showInformationMessage(
+                'Already connected to MCP Server',
+                'Show Info',
+                'Reconnect'
+            ).then(selection => {
+                if (selection === 'Show Info') {
+                    vscode.commands.executeCommand('winccoa.mcp.showInfo');
+                } else if (selection === 'Reconnect') {
+                    vscode.commands.executeCommand('winccoa.mcp.reconnect');
+                }
+            });
             return;
         }
 
         statusBar.setStatus('connecting', 'Connecting...');
 
         const { config, error } = await configDetector.detectConfig();
-
+        
         if (!config) {
             await handleDetectionError(error);
             statusBar.setStatus('error');
             return;
         }
 
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: 'Connecting to MCP Server',
-                cancellable: false,
-            },
-            async (progress) => {
-                progress.report({ message: 'Connecting...' });
-
-                await createClient(config);
-
-                progress.report({ message: 'Connected!' });
-
-                statusBar.setStatus('connected');
-
-                vscode.window.showInformationMessage(
-                    `✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`,
-                );
-            },
-        );
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Connecting to MCP Server',
+            cancellable: false
+        }, async (progress) => {
+            progress.report({ message: 'Connecting...' });
+            
+            await createClient(config);
+            
+            progress.report({ message: 'Connected!' });
+            
+            statusBar.setStatus('connected');
+            
+            vscode.window.showInformationMessage(
+                `✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`
+            );
+        });
+        
     } catch (error: any) {
         statusBar.setStatus('error', 'Connection failed');
         ExtensionOutputChannel.error(`Connect error: ${error.message}`);
@@ -641,11 +678,12 @@ async function disconnect(): Promise<void> {
 
     try {
         ExtensionOutputChannel.info('Manual disconnect triggered...');
-
+        
         await disposeClient();
         statusBar.setStatus('disconnected');
-
+        
         vscode.window.showInformationMessage('Disconnected from MCP Server');
+        
     } catch (error: any) {
         ExtensionOutputChannel.error(`Disconnect error: ${error.message}`);
         vscode.window.showErrorMessage(`Failed to disconnect: ${error.message}`);
@@ -657,11 +695,11 @@ async function disconnect(): Promise<void> {
  */
 async function reconnect(): Promise<void> {
     ExtensionOutputChannel.info('Manual reconnect triggered...');
-
+    
     try {
         // Get current config
         const { config, error } = await configDetector.detectConfig();
-
+        
         if (!config) {
             await handleDetectionError(error);
             statusBar.setStatus('error');
@@ -669,23 +707,22 @@ async function reconnect(): Promise<void> {
         }
 
         ExtensionOutputChannel.info(`Connecting to MCP Server: ${config.url}`);
-
+        
         // Create new client (disposes old one, starts new monitor)
         await createClient(config);
-
+        
         // Reset monitor reconnect attempts
         if (connectionMonitor) {
             connectionMonitor.reset();
         }
-
+        
         statusBar.setStatus('connected');
-        ExtensionOutputChannel.info(
-            `✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`,
-        );
-
+        ExtensionOutputChannel.info(`✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`);
+        
         vscode.window.showInformationMessage(
-            `Connected to ${config.projectName || 'WinCC OA'} MCP Server`,
+            `Connected to ${config.projectName || 'WinCC OA'} MCP Server`
         );
+        
     } catch (error: any) {
         ExtensionOutputChannel.error(`Reconnect failed: ${error.message}`);
         statusBar.setStatus('error');
@@ -698,13 +735,11 @@ async function reconnect(): Promise<void> {
  */
 async function executeScript(scriptPath: string, args: string = ''): Promise<void> {
     try {
-        ExtensionOutputChannel.info(
-            `Execute Script requested: ${scriptPath} with args: ${args || '(none)'}`,
-        );
+        ExtensionOutputChannel.info(`Execute Script requested: ${scriptPath} with args: ${args || '(none)'}`);
 
         // Find script file in workspace
         const files = await vscode.workspace.findFiles(`**/${scriptPath}`, '**/node_modules/**', 1);
-
+        
         if (files.length === 0) {
             throw new Error(`Script not found: ${scriptPath}`);
         }
@@ -712,17 +747,19 @@ async function executeScript(scriptPath: string, args: string = ''): Promise<voi
         const fileUri = files[0];
 
         // Check if Script Actions extension is available
-        const scriptActionsExt = vscode.extensions.getExtension(
-            'richardjanisch.winccoa-script-actions',
-        );
+        const scriptActionsExt = vscode.extensions.getExtension('richardjanisch.winccoa-script-actions');
         if (!scriptActionsExt) {
             throw new Error('WinCC OA Script Actions extension not installed');
         }
 
         // Execute script via Script Actions extension
         ExtensionOutputChannel.info(`Calling Script Actions: ${fileUri.fsPath} with args: ${args}`);
-
-        await vscode.commands.executeCommand('winccoa.executeScriptWithArgs', fileUri, args);
+        
+        await vscode.commands.executeCommand(
+            'winccoa.executeScriptWithArgs',
+            fileUri,
+            args
+        );
 
         ExtensionOutputChannel.info(`✅ Script execution started successfully`);
     } catch (error: any) {
@@ -739,24 +776,18 @@ async function runSetup(): Promise<void> {
         ExtensionOutputChannel.info('Running MCP Server Setup Wizard...');
 
         // Get active project from Project Admin Extension
-        const projectAdminExt = vscode.extensions.getExtension(
-            'RichardJanisch.winccoa-project-admin',
-        );
+        const projectAdminExt = vscode.extensions.getExtension('RichardJanisch.winccoa-project-admin');
         if (!projectAdminExt) {
-            vscode.window
-                .showErrorMessage(
-                    'WinCC OA Project Admin Extension required for auto-setup',
-                    'Install Extension',
-                )
-                .then((selection) => {
-                    if (selection === 'Install Extension') {
-                        vscode.env.openExternal(
-                            vscode.Uri.parse(
-                                'https://marketplace.visualstudio.com/items?itemName=RichardJanisch.winccoa-project-admin',
-                            ),
-                        );
-                    }
-                });
+            vscode.window.showErrorMessage(
+                'WinCC OA Project Admin Extension required for auto-setup',
+                'Install Extension'
+            ).then(selection => {
+                if (selection === 'Install Extension') {
+                    vscode.env.openExternal(vscode.Uri.parse(
+                        'https://marketplace.visualstudio.com/items?itemName=RichardJanisch.winccoa-project-admin'
+                    ));
+                }
+            });
             return;
         }
 
@@ -768,9 +799,7 @@ async function runSetup(): Promise<void> {
 
         const project = await api.getCurrentProject();
         if (!project) {
-            vscode.window.showWarningMessage(
-                'No WinCC OA project selected. Please select a project first.',
-            );
+            vscode.window.showWarningMessage('No WinCC OA project selected. Please select a project first.');
             return;
         }
 
@@ -779,9 +808,7 @@ async function runSetup(): Promise<void> {
         // Project Admin API uses projectDir, not path
         const projectPath = project.projectDir;
         if (!projectPath) {
-            throw new Error(
-                'Could not determine project path from Project Admin API (projectDir missing)',
-            );
+            throw new Error('Could not determine project path from Project Admin API (projectDir missing)');
         }
 
         ExtensionOutputChannel.info(`Project path: ${projectPath}`);
@@ -789,9 +816,9 @@ async function runSetup(): Promise<void> {
         ExtensionOutputChannel.info(`WinCC OA install path: ${project.oaInstallPath}`);
 
         // Version check: MCP Server requires WinCC OA 3.20 or higher
-        const minVersion = 3.2;
+        const minVersion = 3.20;
         const projectVersion = parseFloat(project.version);
-
+        
         if (isNaN(projectVersion) || projectVersion < minVersion) {
             const errorMsg = `MCP Server requires WinCC OA 3.20 or higher.\n\nYour project uses version: ${project.version}\n\nPlease upgrade to WinCC OA 3.20+ to use the MCP Server.`;
             ExtensionOutputChannel.error(errorMsg);
@@ -806,21 +833,17 @@ async function runSetup(): Promise<void> {
                 `MCP Server already installed in project "${project.name}".\n\nDo you want to delete and reinstall?`,
                 { modal: true },
                 'Yes, Reinstall',
-                'Cancel',
+                'Cancel'
             );
-
+            
             if (answer !== 'Yes, Reinstall') {
                 ExtensionOutputChannel.info('Setup cancelled - MCP Server already installed');
                 return;
             }
-
+            
             // User wants to reinstall - call resetAndReinstall
-            const success = await SetupWizard.resetAndReinstall(
-                projectPath,
-                project.name || project.id,
-                project.oaInstallPath,
-            );
-
+            const success = await SetupWizard.resetAndReinstall(projectPath, project.name || project.id);
+            
             if (success) {
                 configDetector.invalidateCache();
                 await vscode.commands.executeCommand('winccoa.mcp.reconnect');
@@ -829,12 +852,8 @@ async function runSetup(): Promise<void> {
         }
 
         // Run setup wizard (fresh install)
-        const success = await SetupWizard.runSetup(
-            projectPath,
-            project.name || project.id,
-            project.oaInstallPath,
-        );
-
+        const success = await SetupWizard.runSetup(projectPath, project.name || project.id);
+        
         if (success) {
             // Invalidate cache and reconnect
             configDetector.invalidateCache();
@@ -854,24 +873,18 @@ async function resetAndReinstall(): Promise<void> {
         ExtensionOutputChannel.info('Reset & Reinstall MCP Server...');
 
         // Get active project from Project Admin Extension
-        const projectAdminExt = vscode.extensions.getExtension(
-            'RichardJanisch.winccoa-project-admin',
-        );
+        const projectAdminExt = vscode.extensions.getExtension('RichardJanisch.winccoa-project-admin');
         if (!projectAdminExt) {
-            vscode.window
-                .showErrorMessage(
-                    'WinCC OA Project Admin Extension required for reset',
-                    'Install Extension',
-                )
-                .then((selection) => {
-                    if (selection === 'Install Extension') {
-                        vscode.env.openExternal(
-                            vscode.Uri.parse(
-                                'https://marketplace.visualstudio.com/items?itemName=RichardJanisch.winccoa-project-admin',
-                            ),
-                        );
-                    }
-                });
+            vscode.window.showErrorMessage(
+                'WinCC OA Project Admin Extension required for reset',
+                'Install Extension'
+            ).then(selection => {
+                if (selection === 'Install Extension') {
+                    vscode.env.openExternal(vscode.Uri.parse(
+                        'https://marketplace.visualstudio.com/items?itemName=RichardJanisch.winccoa-project-admin'
+                    ));
+                }
+            });
             return;
         }
 
@@ -883,29 +896,23 @@ async function resetAndReinstall(): Promise<void> {
 
         const project = await api.getCurrentProject();
         if (!project) {
-            vscode.window.showWarningMessage(
-                'No WinCC OA project selected. Please select a project first.',
-            );
+            vscode.window.showWarningMessage('No WinCC OA project selected. Please select a project first.');
             return;
         }
 
         const projectPath = project.projectDir;
         if (!projectPath) {
-            throw new Error(
-                'Could not determine project path from Project Admin API (projectDir missing)',
-            );
+            throw new Error('Could not determine project path from Project Admin API (projectDir missing)');
         }
 
-        ExtensionOutputChannel.info(
-            `Resetting MCP Server for project: ${project.name || project.id}`,
-        );
+        ExtensionOutputChannel.info(`Resetting MCP Server for project: ${project.name || project.id}`);
         ExtensionOutputChannel.info(`Project path: ${projectPath}`);
         ExtensionOutputChannel.info(`WinCC OA install path: ${project.oaInstallPath}`);
 
         // Version check: MCP Server requires WinCC OA 3.20 or higher
-        const minVersion = 3.2;
+        const minVersion = 3.20;
         const projectVersion = parseFloat(project.version);
-
+        
         if (isNaN(projectVersion) || projectVersion < minVersion) {
             const errorMsg = `MCP Server requires WinCC OA 3.20 or higher.\n\nYour project uses version: ${project.version}\n\nPlease upgrade to WinCC OA 3.20+ to use the MCP Server.`;
             ExtensionOutputChannel.error(errorMsg);
@@ -918,7 +925,7 @@ async function resetAndReinstall(): Promise<void> {
             `This will delete the MCP Server directory and reinstall from scratch.\n\nProject: ${project.name}\n\nManager entries will NOT be deleted.\n\nContinue?`,
             { modal: true },
             'Yes, Reset',
-            'Cancel',
+            'Cancel'
         );
 
         if (answer !== 'Yes, Reset') {
@@ -927,11 +934,7 @@ async function resetAndReinstall(): Promise<void> {
         }
 
         // Call SetupWizard.resetAndReinstall()
-        const success = await SetupWizard.resetAndReinstall(
-            projectPath,
-            project.name || project.id,
-            project.oaInstallPath,
-        );
+        const success = await SetupWizard.resetAndReinstall(projectPath, project.name || project.id);
 
         if (success) {
             vscode.window.showInformationMessage('MCP Server reset and reinstalled successfully!');
