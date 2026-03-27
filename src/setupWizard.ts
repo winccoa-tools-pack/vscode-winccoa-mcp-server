@@ -1,6 +1,6 @@
 /**
  * MCP Server Setup Wizard
- *
+ * 
  * Automatically installs MCP Server if not present in project
  */
 
@@ -8,12 +8,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import simpleGit from 'simple-git';
 import { ExtensionOutputChannel } from './extensionOutput';
 import { ManagerInstallationHelper } from './managerInstallationHelper';
 
 export class SetupWizard {
-    private static readonly MCP_NPM_PACKAGE = '@etm-professional-control/winccoa-mcp-server';
     private static readonly MCP_SUBPATH = 'javascript/mcpServer';
 
     /**
@@ -32,13 +30,8 @@ export class SetupWizard {
     /**
      * Reset MCP Server (delete folder) and reinstall
      */
-    static async resetAndReinstall(
-        projectDir: string,
-        projectName: string,
-        oaInstallPath: string,
-    ): Promise<boolean> {
+    static async resetAndReinstall(projectDir: string, projectName: string): Promise<boolean> {
         ExtensionOutputChannel.info(`Resetting MCP Server for project: ${projectName}`);
-        ExtensionOutputChannel.info(`Using WinCC OA installation: ${oaInstallPath}`);
 
         const mcpPath = path.join(projectDir, this.MCP_SUBPATH);
 
@@ -47,67 +40,41 @@ export class SetupWizard {
             const isInstalled = await this.isMcpServerInstalled(projectDir);
             if (!isInstalled) {
                 ExtensionOutputChannel.info('MCP Server not installed - running setup instead');
-                return await this.runSetup(projectDir, projectName, oaInstallPath);
+                return await this.runSetup(projectDir, projectName);
             }
 
             // Step 2: Delete MCP Server folder and reinstall
-            await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: `Resetting MCP Server for ${projectName}`,
-                    cancellable: false,
-                },
-                async (progress) => {
-                    progress.report({ increment: 0, message: 'Deleting MCP Server folder...' });
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Resetting MCP Server for ${projectName}`,
+                cancellable: false
+            }, async (progress) => {
+                progress.report({ increment: 0, message: 'Deleting MCP Server folder...' });
 
-                    try {
-                        await fs.rm(mcpPath, { recursive: true, force: true });
-                        ExtensionOutputChannel.info(`Deleted folder: ${mcpPath}`);
-                    } catch (error: any) {
-                        ExtensionOutputChannel.warn(
-                            `Could not delete folder (may not exist): ${error.message}`,
-                        );
-                    }
+                try {
+                    await fs.rm(mcpPath, { recursive: true, force: true });
+                    ExtensionOutputChannel.info(`Deleted folder: ${mcpPath}`);
+                } catch (error: any) {
+                    ExtensionOutputChannel.warn(`Could not delete folder (may not exist): ${error.message}`);
+                }
 
-                    // Get install method from settings
-                    const config = vscode.workspace.getConfiguration('winccoa.mcp');
-                    const installMethod = config.get<string>('installMethod', 'git');
+                progress.report({ increment: 20, message: 'Downloading from GitHub releases...' });
+                await this.installFromGithubRelease(projectDir);
 
-                    progress.report({
-                        increment: 20,
-                        message: `Installing via ${installMethod}...`,
-                    });
+                progress.report({ increment: 85, message: 'Generating security token...' });
+                const token = this.generateToken();
 
-                    if (installMethod === 'git') {
-                        await this.installFromGit(projectDir, oaInstallPath);
-                    } else {
-                        await this.installFromNpm(projectDir, oaInstallPath);
-                    }
+                progress.report({ increment: 95, message: 'Creating configuration...' });
+                await this.createEnvFile(projectDir, token);
 
-                    progress.report({ increment: 85, message: 'Generating security token...' });
-                    const token = this.generateToken();
-
-                    progress.report({ increment: 95, message: 'Creating configuration...' });
-                    await this.createEnvFile(projectDir, token);
-
-                    progress.report({ increment: 100, message: 'Reset complete!' });
-                },
-            );
+                progress.report({ increment: 100, message: 'Reset complete!' });
+            });
 
             ExtensionOutputChannel.info('✅ MCP Server reset and reinstalled successfully');
-
-            // Automatically add manager (no wizard on reinstall)
-            const mcpServerPath = path.join(projectDir, this.MCP_SUBPATH);
-            ExtensionOutputChannel.info('Adding manager automatically after reinstall...');
-
-            await ManagerInstallationHelper.addManagerAutomatically(projectDir, mcpServerPath);
-
-            // Wait for manager to start (give it 6 seconds to initialize)
-            ExtensionOutputChannel.info('Waiting for MCP Server manager to start...');
-            await new Promise((resolve) => setTimeout(resolve, 6000));
-            ExtensionOutputChannel.info('✅ Manager should be ready now');
+            ExtensionOutputChannel.info('Note: Manager entry in config/progs was NOT modified');
 
             return true;
+
         } catch (error: any) {
             ExtensionOutputChannel.error(`Reset failed: ${error.message}`);
             vscode.window.showErrorMessage(`MCP Server reset failed: ${error.message}`);
@@ -118,20 +85,15 @@ export class SetupWizard {
     /**
      * Run auto-setup wizard
      */
-    static async runSetup(
-        projectDir: string,
-        projectName: string,
-        oaInstallPath: string,
-    ): Promise<boolean> {
+    static async runSetup(projectDir: string, projectName: string): Promise<boolean> {
         ExtensionOutputChannel.info(`Starting MCP Server setup for project: ${projectName}`);
-        ExtensionOutputChannel.info(`Using WinCC OA installation: ${oaInstallPath}`);
 
         // Ask user for confirmation
         const answer = await vscode.window.showInformationMessage(
             `MCP Server not found in project "${projectName}". Install now?`,
             { modal: true },
             'Install',
-            'Skip',
+            'Skip'
         );
 
         if (answer !== 'Install') {
@@ -140,45 +102,30 @@ export class SetupWizard {
         }
 
         try {
-            // Get install method from settings
-            const config = vscode.workspace.getConfiguration('winccoa.mcp');
-            const installMethod = config.get<string>('installMethod', 'git');
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Installing MCP Server for ${projectName}`,
+                cancellable: false
+            }, async (progress) => {
+                // Step 1: Download and install from latest GitHub release
+                progress.report({ increment: 0, message: 'Downloading from GitHub releases...' });
+                await this.installFromGithubRelease(projectDir);
 
-            await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: `Installing MCP Server for ${projectName}`,
-                    cancellable: false,
-                },
-                async (progress) => {
-                    // Step 1: Install MCP Server (NPM or Git)
-                    progress.report({
-                        increment: 0,
-                        message: `Installing via ${installMethod}...`,
-                    });
+                // Step 2: Generate Token
+                progress.report({ increment: 80, message: 'Generating security token...' });
+                const token = this.generateToken();
 
-                    if (installMethod === 'git') {
-                        await this.installFromGit(projectDir, oaInstallPath);
-                    } else {
-                        await this.installFromNpm(projectDir, oaInstallPath);
-                    }
+                // Step 3: Create .env File
+                progress.report({ increment: 90, message: 'Creating configuration...' });
+                await this.createEnvFile(projectDir, token);
 
-                    // Step 2: Generate Token
-                    progress.report({ increment: 80, message: 'Generating security token...' });
-                    const token = this.generateToken();
-
-                    // Step 3: Create .env File
-                    progress.report({ increment: 90, message: 'Creating configuration...' });
-                    await this.createEnvFile(projectDir, token);
-
-                    progress.report({ increment: 100, message: 'Installation complete!' });
-                },
-            );
+                progress.report({ increment: 100, message: 'Installation complete!' });
+            });
 
             // Ask user for manager installation
             const mcpServerPath = path.join(projectDir, this.MCP_SUBPATH);
             const choice = await ManagerInstallationHelper.askUserForInstallation(mcpServerPath);
-
+            
             if (choice === 'auto') {
                 await ManagerInstallationHelper.addManagerAutomatically(projectDir, mcpServerPath);
             } else if (choice === 'manual') {
@@ -187,6 +134,7 @@ export class SetupWizard {
 
             ExtensionOutputChannel.info('✅ MCP Server setup completed successfully');
             return true;
+
         } catch (error: any) {
             ExtensionOutputChannel.error(`Setup failed: ${error.message}`);
             vscode.window.showErrorMessage(`MCP Server installation failed: ${error.message}`);
@@ -195,237 +143,147 @@ export class SetupWizard {
     }
 
     /**
-     * Install MCP Server from NPM package
+     * Install MCP Server from latest GitHub release asset (.tgz)
      */
-    private static async installFromNpm(projectDir: string, oaInstallPath: string): Promise<void> {
-        const mcpServerDir = path.join(projectDir, this.MCP_SUBPATH);
-
-        // Create directory structure
-        await fs.mkdir(mcpServerDir, { recursive: true });
-
-        ExtensionOutputChannel.info(`Installing NPM package to: ${mcpServerDir}`);
-
-        // Install NPM package (postinstall.cjs will copy files automatically)
-        const result = await this.executeCommand(
-            'npm',
-            ['install', this.MCP_NPM_PACKAGE],
-            mcpServerDir,
-        );
-
-        if (result.exitCode !== 0) {
-            throw new Error(`npm install failed: ${result.stderr}`);
-        }
-
-        ExtensionOutputChannel.info('✅ MCP Server package installed successfully');
-        ExtensionOutputChannel.info('✅ postinstall copied files to installation directory');
-
-        // Install winccoa-manager
-        await this.installWinCCOAManager(projectDir, oaInstallPath);
-    }
-
-    /**
-     * Install MCP Server from Git repository
-     */
-    private static async installFromGit(projectDir: string, oaInstallPath: string): Promise<void> {
+    private static async installFromGithubRelease(projectDir: string): Promise<void> {
         const config = vscode.workspace.getConfiguration('winccoa.mcp');
-        const gitUrl = config.get<string>(
-            'gitRepositoryUrl',
-            'https://github.com/RichardJanisch/winccoa-ae-js-mcpserver.git',
-        );
-        const gitBranch = config.get<string>('gitBranch', 'main');
+        const githubRepo = config.get<string>('githubRepo', 'winccoa-tools-pack/winccoa-mcp-server');
 
         const mcpServerDir = path.join(projectDir, this.MCP_SUBPATH);
-        const tempBuildDir = path.join(projectDir, 'javascript', '.mcp-build-temp');
+        const tempFile = path.join(projectDir, 'javascript', `.mcp-release-${Date.now()}.tar.gz`);
 
-        ExtensionOutputChannel.info(`Installing from Git: ${gitUrl} (branch: ${gitBranch})`);
+        ExtensionOutputChannel.info(`Fetching latest release from: ${githubRepo}`);
 
         try {
-            // Step 1: Clean up temp and target directories
-            await fs.rm(tempBuildDir, { recursive: true, force: true });
+            // Step 1: Get latest release info from GitHub API
+            const releaseInfo = await this.fetchJson(
+                `https://api.github.com/repos/${githubRepo}/releases/latest`
+            );
+            const tagName: string = releaseInfo.tag_name;
+            const assets: Array<{ name: string; browser_download_url: string }> = releaseInfo.assets ?? [];
+
+            const tarGzAsset = assets.find(a => a.name.endsWith('.tar.gz'));
+            if (!tarGzAsset) {
+                throw new Error(`No .tar.gz release asset found in release ${tagName} of ${githubRepo}`);
+            }
+
+            ExtensionOutputChannel.info(`Found release: ${tagName}, downloading: ${tarGzAsset.name}`);
+
+            // Step 2: Download tar.gz to a temp file
+            await fs.mkdir(path.dirname(tempFile), { recursive: true });
+            await this.downloadFile(tarGzAsset.browser_download_url, tempFile);
+            ExtensionOutputChannel.info(`Downloaded ${tarGzAsset.name}`);
+
+            // Step 3: Extract to a temporary directory, then rename to mcpServer
+            const tempExtractDir = path.join(projectDir, 'javascript', `.mcp-extract-${Date.now()}`);
+            await fs.mkdir(tempExtractDir, { recursive: true });
+            const extractResult = await this.executeCommand(
+                'tar',
+                ['-xzf', tempFile, '-C', tempExtractDir],
+                projectDir
+            );
+            if (extractResult.exitCode !== 0) {
+                await fs.rm(tempExtractDir, { recursive: true, force: true });
+                throw new Error(`Extraction failed: ${extractResult.stderr}`);
+            }
+
+            // Detect whether the archive had a subdirectory prefix
+            const entries = await fs.readdir(tempExtractDir, { withFileTypes: true });
+            const subdirs = entries.filter(e => e.isDirectory());
+            const files = entries.filter(e => !e.isDirectory());
+            const sourceDir = (files.length === 0 && subdirs.length === 1)
+                ? path.join(tempExtractDir, subdirs[0].name)
+                : tempExtractDir;
+
+            if (files.length === 0 && subdirs.length === 1) {
+                ExtensionOutputChannel.info(`Artifact directory: ${subdirs[0].name}`);
+            }
+
+            // Remove existing mcpServer (if any) and rename extracted dir to mcpServer
             await fs.rm(mcpServerDir, { recursive: true, force: true });
+            await fs.rename(sourceDir, mcpServerDir);
 
-            // Step 2: Clone repository
-            ExtensionOutputChannel.info(`Cloning repository to: ${tempBuildDir}`);
-            const git = simpleGit();
-            await git.clone(gitUrl, tempBuildDir, ['--branch', gitBranch, '--depth', '1']);
-            ExtensionOutputChannel.info('✅ Git clone successful');
-
-            // Step 3: Detect source directory (mcpWinCCOA subdirectory or root)
-            const mcpWinCCOAPath = path.join(tempBuildDir, 'mcpWinCCOA');
-            let buildSourceDir: string;
-
-            try {
-                await fs.access(mcpWinCCOAPath);
-                buildSourceDir = mcpWinCCOAPath;
-                ExtensionOutputChannel.info('Using mcpWinCCOA subdirectory');
-            } catch {
-                buildSourceDir = tempBuildDir;
-                ExtensionOutputChannel.info('Using repository root');
+            // Clean up temp dir if it still exists (when sourceDir was a subdirectory)
+            if (sourceDir !== tempExtractDir) {
+                await fs.rm(tempExtractDir, { recursive: true, force: true });
             }
+            ExtensionOutputChannel.info(`Installed to: ${mcpServerDir}`);
 
-            // Step 4: Clean old package-lock.json
+            ExtensionOutputChannel.info(`✅ MCP Server ${tagName} installed from GitHub release`);
+
+        } finally {
             try {
-                await fs.rm(path.join(buildSourceDir, 'package-lock.json'), { force: true });
+                await fs.rm(tempFile, { force: true });
             } catch {}
-
-            // Step 5: Install ALL dependencies (including devDependencies for TypeScript)
-            ExtensionOutputChannel.info('Installing dependencies (including TypeScript)...');
-            const installResult = await this.executeCommand('npm', ['install'], buildSourceDir);
-            if (installResult.exitCode !== 0) {
-                throw new Error(`npm install failed: ${installResult.stderr}`);
-            }
-
-            // Step 6: Build TypeScript
-            ExtensionOutputChannel.info('Building TypeScript sources...');
-            const buildResult = await this.executeCommand('npx', ['tsc'], buildSourceDir);
-            if (buildResult.exitCode !== 0) {
-                throw new Error(`TypeScript build failed: ${buildResult.stderr}`);
-            }
-
-            // Step 7: Create final installation directory
-            await fs.mkdir(mcpServerDir, { recursive: true });
-
-            // Step 8: Copy build/* contents to ROOT (mimicking NPM postinstall)
-            ExtensionOutputChannel.info('Copying build files to installation directory...');
-            const buildDir = path.join(buildSourceDir, 'build');
-            await this.copyDirectoryContents(buildDir, mcpServerDir);
-
-            // Step 9: Copy additional files
-            await this.copyFileIfExists(
-                path.join(buildSourceDir, '.env.example'),
-                path.join(mcpServerDir, '.env.example'),
-            );
-            await this.copyFileIfExists(
-                path.join(buildSourceDir, 'src', 'systemprompt.md'),
-                path.join(mcpServerDir, 'systemprompt.md'),
-            );
-            await this.copyFileIfExists(
-                path.join(buildSourceDir, 'package.json'),
-                path.join(mcpServerDir, 'package.json'),
-            );
-            await this.copyFileIfExists(
-                path.join(buildSourceDir, 'postinstall.cjs'),
-                path.join(mcpServerDir, 'postinstall.cjs'),
-            );
-            await this.copyFileIfExists(
-                path.join(buildSourceDir, 'config', 'demo-project-instructions.md'),
-                path.join(mcpServerDir, 'demo-project-instructions.md'),
-            );
-            await this.copyDirectoryIfExists(
-                path.join(buildSourceDir, 'src', 'fields'),
-                path.join(mcpServerDir, 'fields'),
-            );
-
-            // Step 10: Install production dependencies
-            ExtensionOutputChannel.info('Installing production dependencies...');
-            const prodInstallResult = await this.executeCommand(
-                'npm',
-                ['install', '--omit=dev'],
-                mcpServerDir,
-            );
-            if (prodInstallResult.exitCode !== 0) {
-                throw new Error(`Production install failed: ${prodInstallResult.stderr}`);
-            }
-
-            // Step 11: Install winccoa-manager
-            await this.installWinCCOAManager(projectDir, oaInstallPath);
-
-            // Step 12: Cleanup temp directory
-            await fs.rm(tempBuildDir, { recursive: true, force: true });
-
-            ExtensionOutputChannel.info('✅ Git installation completed successfully');
-        } catch (error: any) {
-            // Cleanup on error
-            try {
-                await fs.rm(tempBuildDir, { recursive: true, force: true });
-            } catch {}
-            throw error;
         }
     }
 
     /**
-     * Copy directory contents recursively
+     * Fetch JSON from a URL (HTTPS only)
      */
-    private static async copyDirectoryContents(source: string, dest: string): Promise<void> {
-        const entries = await fs.readdir(source, { withFileTypes: true });
+    private static fetchJson(url: string): Promise<any> {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const https = require('https');
+        const parsed = new URL(url);
 
-        for (const entry of entries) {
-            const sourcePath = path.join(source, entry.name);
-            const destPath = path.join(dest, entry.name);
-
-            if (entry.isDirectory()) {
-                await fs.cp(sourcePath, destPath, { recursive: true });
-            } else {
-                await fs.copyFile(sourcePath, destPath);
-            }
-        }
+        return new Promise((resolve, reject) => {
+            https.get(
+                {
+                    hostname: parsed.hostname,
+                    path: parsed.pathname + parsed.search,
+                    headers: {
+                        'User-Agent': 'vscode-winccoa-mcp-server',
+                        'Accept': 'application/vnd.github+json'
+                    }
+                },
+                (response: any) => {
+                    let data = '';
+                    response.on('data', (chunk: Buffer) => { data += chunk; });
+                    response.on('end', () => {
+                        try {
+                            resolve(JSON.parse(data));
+                        } catch (e) {
+                            reject(new Error(`Failed to parse GitHub API response: ${e}`));
+                        }
+                    });
+                }
+            ).on('error', reject);
+        });
     }
 
     /**
-     * Copy file if it exists
+     * Download a file from a URL to a local path, following redirects
      */
-    private static async copyFileIfExists(source: string, dest: string): Promise<void> {
-        try {
-            await fs.copyFile(source, dest);
-            ExtensionOutputChannel.debug(`Copied: ${path.basename(source)}`);
-        } catch {
-            ExtensionOutputChannel.debug(`Skipped (not found): ${path.basename(source)}`);
-        }
+    private static downloadFile(url: string, destPath: string): Promise<void> {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const https = require('https');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const http = require('http');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fsSync = require('fs');
+
+        return new Promise((resolve, reject) => {
+            const download = (downloadUrl: string) => {
+                const protocol = downloadUrl.startsWith('https') ? https : http;
+                protocol.get(downloadUrl, (response: any) => {
+                    if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307) {
+                        download(response.headers.location);
+                        return;
+                    }
+                    if (response.statusCode !== 200) {
+                        reject(new Error(`Download failed with HTTP ${response.statusCode}: ${downloadUrl}`));
+                        return;
+                    }
+                    const fileStream = fsSync.createWriteStream(destPath);
+                    response.pipe(fileStream);
+                    fileStream.on('finish', () => { fileStream.close(); resolve(); });
+                    fileStream.on('error', reject);
+                }).on('error', reject);
+            };
+            download(url);
+        });
     }
 
-    /**
-     * Copy directory if it exists
-     */
-    private static async copyDirectoryIfExists(source: string, dest: string): Promise<void> {
-        try {
-            await fs.access(source);
-            await fs.cp(source, dest, { recursive: true });
-            ExtensionOutputChannel.debug(`Copied directory: ${path.basename(source)}`);
-        } catch {
-            ExtensionOutputChannel.debug(`Skipped directory (not found): ${path.basename(source)}`);
-        }
-    }
-
-    /**
-     * Install winccoa-manager package from WinCC OA installation
-     */
-    private static async installWinCCOAManager(
-        projectDir: string,
-        oaInstallPath: string,
-    ): Promise<void> {
-        const mcpServerDir = path.join(projectDir, this.MCP_SUBPATH);
-
-        if (!oaInstallPath) {
-            throw new Error('WinCC OA installation path not provided by Project Admin Extension');
-        }
-
-        // Build path to winccoa-manager package
-        const winCCOAManagerPath = path.join(oaInstallPath, 'javascript', 'winccoa-manager');
-
-        ExtensionOutputChannel.info(`Looking for winccoa-manager at: ${winCCOAManagerPath}`);
-
-        // Verify package exists
-        try {
-            await fs.access(winCCOAManagerPath);
-            ExtensionOutputChannel.info(`✅ Found winccoa-manager package`);
-        } catch {
-            throw new Error(`WinCC OA Manager package not found at: ${winCCOAManagerPath}`);
-        }
-
-        // Install winccoa-manager via npm
-        ExtensionOutputChannel.info(`Installing winccoa-manager from: ${winCCOAManagerPath}`);
-        const installResult = await this.executeCommand(
-            'npm',
-            ['install', `"file:${winCCOAManagerPath}"`],
-            mcpServerDir,
-        );
-
-        if (installResult.exitCode !== 0) {
-            throw new Error(`Failed to install winccoa-manager: ${installResult.stderr}`);
-        }
-
-        ExtensionOutputChannel.info('✅ winccoa-manager installed successfully');
-    }
 
     /**
      * Generate secure random token
@@ -435,68 +293,41 @@ export class SetupWizard {
     }
 
     /**
-     * Create .env configuration file
+     * Create .env configuration file from .env.example, injecting a generated token
      */
     private static async createEnvFile(projectDir: string, token: string): Promise<void> {
         const envPath = path.join(projectDir, this.MCP_SUBPATH, '.env');
+        const envExamplePath = path.join(projectDir, this.MCP_SUBPATH, '.env.example');
 
-        const envContent = `# WinCC OA MCP Server Configuration
-# Auto-generated by WinCC OA MCP Server Extension
+        let envContent: string;
 
-# Security Token (keep secret!)
-MCP_API_TOKEN=${token}
+        try {
+            const example = await fs.readFile(envExamplePath, 'utf8');
+            envContent = example.replace(/^MCP_API_TOKEN=.*$/m, `MCP_API_TOKEN=${token}`);
+            ExtensionOutputChannel.info('Created .env from .env.example');
+        } catch {
+            ExtensionOutputChannel.warn('.env.example not found, using fallback template');
+            envContent = [
+                '# WinCC OA MCP Server Configuration',
+                '# Auto-generated by WinCC OA MCP Server Extension',
+                '',
+                `MCP_API_TOKEN=${token}`,
+                'MCP_MODE=http',
+                'MCP_HTTP_PORT=3000',
+                'MCP_HTTP_HOST=0.0.0.0',
+                'MCP_AUTH_TYPE=bearer',
+                'RATE_LIMIT_ENABLED=true',
+                'MCP_CORS_ENABLED=true',
+                'MCP_CORS_ORIGINS=*',
+                'WINCCOA_FIELD=default',
+                'TOOLS=datapoints/dp_basic,datapoints/dp_types,archive/archive_query,common/common_query,pv_range/pv_range_query,manager/manager_list',
+                ''
+            ].join('\n');
+        }
 
-# Server Mode and Port
-MCP_MODE=http
-MCP_HTTP_PORT=3001
-MCP_HTTP_HOST=0.0.0.0
-
-# Authentication
-MCP_AUTH_TYPE=bearer
-
-# Rate Limiting
-RATE_LIMIT_ENABLED=true
-
-# CORS Configuration
-MCP_CORS_ENABLED=true
-MCP_CORS_ORIGINS=*
-
-# WinCC OA Field (usually "default")
-WINCCOA_FIELD=default
-
-# Available Tools (comma-separated)
-TOOLS=datapoints/dp_basic,datapoints/dp_create,datapoints/dp_set,datapoints/dp_types,datapoints/dp_type_create,manager/manager_list,manager/manager_add,manager/manager_control,manager/manager_properties,manager/manager_remove,archive/archive_query,archive/archive_set,archive/archive_delete,alarms/alarm_set,alarms/alarm_delete,common/common_query,common/common_set,common/common_delete,pv_range/pv_range_query,pv_range/pv_range_set,pv_range/pv_range_delete,modbus/modbus_address,opcua/opcua_address,opcua/opcua_connection,dashboards/dashboard,dashboards/widget,icons/icon
-`;
-
-        // Ensure build directory exists
         await fs.mkdir(path.dirname(envPath), { recursive: true });
-
         await fs.writeFile(envPath, envContent, 'utf8');
         ExtensionOutputChannel.info(`Configuration file created: ${envPath}`);
-    }
-
-    /**
-     * Show PMON integration instructions
-     */
-    private static async showPmonInstructions(projectDir: string): Promise<void> {
-        const instructions = `# Manual Step Required: Add MCP Server Manager to PMON
-
-1. Open your WinCC OA project config: ${projectDir}/config/progs
-
-2. Add the following line to start the MCP Server manager:
-
-node -num 3 manual 1 1 2 2 javascript/mcpServer/index_http.js
-
-3. Save the file and restart PMON
-
-Note: Automatic PMON integration will be added in a future version.`;
-
-        const doc = await vscode.workspace.openTextDocument({
-            content: instructions,
-            language: 'markdown',
-        });
-
-        await vscode.window.showTextDocument(doc);
     }
 
     /**
@@ -505,7 +336,7 @@ Note: Automatic PMON integration will be added in a future version.`;
     private static async executeCommand(
         command: string,
         args: string[],
-        cwd: string,
+        cwd: string
     ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
         return new Promise((resolve, reject) => {
             const { spawn } = require('child_process');

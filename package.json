@@ -3,7 +3,7 @@
   "displayName": "WinCC OA MCP Server",
   "description": "Model Context Protocol server for WinCC OA - enables AI assistants to interact with WinCC OA projects",
   "publisher": "RichardJanisch",
-  "version": "1.7.0",
+  "version": "1.6.2",
   "preview": true,
   "author": "Richard Janisch",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "url": "https://github.com/rjanisch/vscode-winccoa-mcp-server.git"
   },
   "engines": {
-    "vscode": "^1.110.0"
+    "vscode": "^1.80.0"
   },
   "categories": [
     "Other"
@@ -35,34 +35,10 @@
   ],
   "main": "dist/src/extension.js",
   "scripts": {
-    "clean:out": "node -e \"require('fs').rmSync('out',{ recursive:true, force:true, maxRetries:10, retryDelay:200 })\"",
-    "clean:coverage": "node -e \"require('fs').rmSync('coverage',{ recursive:true, force:true, maxRetries:10, retryDelay:200 })\"",
-    "clean:coverage:unitTests": "node -e \"require('fs').rmSync('coverage/unitTests',{ recursive:true, force:true, maxRetries:10, retryDelay:200 })\"",
-    "clean:coverage:integrationTests": "node -e \"require('fs').rmSync('coverage/integrationTests',{ recursive:true, force:true, maxRetries:10, retryDelay:200 })\"",
     "compile": "tsc -p ./",
-    "compile:tsc": "tsc -p ./ && npm run copy-fixtures",
-    "copy-fixtures": "node scripts/copy-fixtures.mjs",
-    "ci:integration": "npm ci && npm run compile && npm run test:integration",
-    "dev": "npm run watch",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
-    "lint": "eslint \"src/**/*.ts\"",
-    "lint:fix": "eslint \"src/**/*.ts\" --fix",
-    "lint:md": "markdownlint \"**/*.md\" --ignore node_modules",
-    "lint:md:fix": "markdownlint \"**/*.md\" --ignore node_modules --fix",
-    "package": "vsce package",
-    "pretest": "npm run compile && npm run lint",
-    "start": "code --extensionDevelopmentPath=.",
-    "start:insiders": "code-insiders --extensionDevelopmentPath=.",
-    "style-check": "npm run format:check && npm run lint",
+    "watch": "tsc -watch -p ./",
     "test": "node dist/test/mcpClient.test.js",
-    "test:unit": "vscode-test --label unitTests",
-    "test:integration": "vscode-test --label integrationTests",
-    "test:unit:coverage": "npm run compile && npm run clean:coverage:unitTests && vscode-test --label unitTests --coverage --coverage-output coverage/unitTests --coverage-reporter lcov --coverage-reporter html --coverage-reporter json-summary --coverage-reporter text-summary",
-    "test:integration:coverage": "npm run compile && npm run clean:coverage:integrationTests && vscode-test --label integrationTests --coverage --coverage-output coverage/integrationTests --coverage-reporter lcov --coverage-reporter html --coverage-reporter json-summary --coverage-reporter text-summary",
-    "test:coverage": "npm run test:unit:coverage && npm run test:integration:coverage",
-    "vscode:prepublish": "npm run compile",
-    "watch": "tsc -watch -p ./"
+    "package": "vsce package"
   },
   "contributes": {
     "commands": [
@@ -286,7 +262,9 @@
                 },
                 "type": {
                   "type": "string",
-                  "enum": ["Struct"],
+                  "enum": [
+                    "Struct"
+                  ],
                   "description": "Type must be 'Struct'"
                 },
                 "children": {
@@ -301,7 +279,24 @@
                       },
                       "type": {
                         "type": "string",
-                        "enum": ["Bool", "Int", "UInt", "Float", "String", "Char", "Time", "Bit32", "Bit64", "DynBool", "DynInt", "DynUInt", "DynFloat", "DynString", "DynChar", "DynTime"],
+                        "enum": [
+                          "Bool",
+                          "Int",
+                          "UInt",
+                          "Float",
+                          "String",
+                          "Char",
+                          "Time",
+                          "Bit32",
+                          "Bit64",
+                          "DynBool",
+                          "DynInt",
+                          "DynUInt",
+                          "DynFloat",
+                          "DynString",
+                          "DynChar",
+                          "DynTime"
+                        ],
                         "description": "Element data type"
                       },
                       "children": {
@@ -312,11 +307,18 @@
                         }
                       }
                     },
-                    "required": ["name", "type"]
+                    "required": [
+                      "name",
+                      "type"
+                    ]
                   }
                 }
               },
-              "required": ["name", "type", "children"]
+              "required": [
+                "name",
+                "type",
+                "children"
+              ]
             }
           },
           "required": [
@@ -343,7 +345,10 @@
             },
             "direction": {
               "type": "string",
-              "enum": ["ASC", "DESC"],
+              "enum": [
+                "ASC",
+                "DESC"
+              ],
               "description": "Alarm direction: ASC (ascending, higher values trigger higher severity) or DESC (descending, lower values trigger higher severity). Example: ASC for high temperature alarm, DESC for low level alarm. Default classes: ASC=['information.','warning.','alert.'], DESC=['alert.','warning.','information.'].",
               "default": "ASC"
             },
@@ -668,82 +673,37 @@
           "default": true,
           "description": "Show connection status notifications (reconnect success/failure)"
         },
-        "winccoa.mcp.installMethod": {
+        "winccoa.mcp.githubRepo": {
           "type": "string",
-          "enum": [
-            "npm",
-            "git"
-          ],
-          "default": "npm",
-          "description": "Installation method for MCP Server",
-          "enumDescriptions": [
-            "Install from official NPM package (@etm-professional-control/winccoa-mcp-server)",
-            "Install from Git repository (allows using custom forks with additional features)"
-          ]
-        },
-        "winccoa.mcp.gitRepositoryUrl": {
-          "type": "string",
-          "default": "https://github.com/RichardJanisch/winccoa-ae-js-mcpserver.git",
-          "description": "Git repository URL for MCP Server (only used when installMethod is 'git')"
-        },
-        "winccoa.mcp.gitBranch": {
-          "type": "string",
-          "default": "main",
-          "description": "Git branch to use (only used when installMethod is 'git')"
+          "default": "winccoa-tools-pack/winccoa-mcp-server",
+          "description": "GitHub repository (owner/repo) to download the MCP Server release from"
         }
       }
     }
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^25.5.0",
+    "@types/node": "^24.10.8",
     "@types/sinon": "^21.0.0",
-    "@types/vscode": "^1.110.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.1",
-    "@typescript-eslint/parser": "^8.56.0",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0",
+    "@vscode/test-electron": "^2.3.9",
     "@vscode/vsce": "^3.7.1",
+    "@winccoa-tools-pack/npm-winccoa-core": "^0.1.1",
     "chai": "^6.2.2",
-    "eslint": "^10.0.3",
-    "glob": "^13.0.3",
-    "globals": "^17.4.0",
-    "markdownlint-cli": "^0.48.0",
+    "eslint": "^8.50.0",
+    "glob": "^13.0.0",
+    "markdownlint-cli": "^0.36.0",
     "mocha": "^11.7.5",
-    "prettier": "^3.8.1",
+    "prettier": "^2.8.8",
     "sinon": "^21.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.2.0",
-    "typescript-eslint": "^8.32.1",
     "vscode-test": "^1.6.1"
   },
-  "overrides": {
-    "diff": "8.0.3",
-    "minimatch": "10.2.2",
-    "mocha": {
-      "minimatch": "10.2.2"
-    },
-    "@vscode/test-cli": {
-      "minimatch": "10.2.2"
-    },
-    "@typescript-eslint/typescript-estree": {
-      "minimatch": "10.2.2"
-    },
-    "markdownlint-cli": {
-      "minimatch": "10.2.2"
-    },
-    "@vscode/vsce": {
-      "minimatch": "3.1.2"
-    }
-  },
-  "config": {
-    "winccoaImage": "mpokornyetm/winccoa-tools-pack-npm-winccoa-core:npm-winccoa-core"
-  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "@winccoa-tools-pack/npm-winccoa-core": "^0.2.3",
-    "simple-git": "^3.30.0"
+    "@modelcontextprotocol/sdk": "^1.0.0"
   }
 }
