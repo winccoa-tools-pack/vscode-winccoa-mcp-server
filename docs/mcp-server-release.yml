@@ -1,0 +1,101 @@
+##############################################################################
+# Release Workflow for winccoa-mcp-server (Node.js MCP server backend)
+#
+# PURPOSE:
+#   Builds the TypeScript MCP server and packages ONLY the compiled dist/
+#   contents into a .tar.gz release asset. The vscode-winccoa-mcp-server
+#   VS Code extension downloads this asset to install the MCP server into
+#   a WinCC OA project.
+#
+# HOW TO USE:
+#   Copy this file to: .github/workflows/release.yml
+#   in the winccoa-mcp-server (Node.js) repository.
+#
+# EXPECTED DIST STRUCTURE (contents of tar.gz after extraction):
+#   index.js        ← esbuild-bundled server (all deps except winccoa-manager)
+#   .env.example    ← configuration template
+#   package.json    ← needed for: npm install "file:<winccoa-manager-path>"
+#   [other runtime files: systemprompt.md, fields/, etc.]
+#
+# NOTE: winccoa-manager is a native WinCC OA add-on that cannot be bundled
+#       with esbuild. It is installed post-extraction by the VS Code extension
+#       from the local WinCC OA installation directory.
+##############################################################################
+
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: "Release tag (e.g. v1.0.0)"
+                required: true
+                type: string
+
+permissions:
+    contents: write
+
+jobs:
+    build-and-release:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: "20"
+                  cache: "npm"
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build
+              run: npm run build
+
+            - name: Verify dist contents
+              run: |
+                  echo "📦 Checking dist/ contents..."
+                  ls -la dist/
+
+                  # Fail fast if required files are missing
+                  for f in index.js .env.example package.json; do
+                    if [ ! -f "dist/$f" ]; then
+                      echo "❌ Missing required file: dist/$f"
+                      exit 1
+                    fi
+                    echo "✅ Found: dist/$f"
+                  done
+
+            - name: Get version from package.json
+              id: version
+              run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+            - name: Create release archive
+              id: archive
+              run: |
+                  ASSET_NAME="winccoa-mcp-server-${{ steps.version.outputs.version }}.tar.gz"
+                  # Pack dist/ contents at archive root (no 'dist/' prefix in paths)
+                  tar -czf "$ASSET_NAME" -C dist .
+                  echo "asset_name=$ASSET_NAME" >> $GITHUB_OUTPUT
+
+                  echo "📦 Archive contents:"
+                  tar -tzf "$ASSET_NAME"
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.ref_name || github.event.inputs.tag }}
+                  name: "Release ${{ github.ref_name || github.event.inputs.tag }}"
+                  files: ${{ steps.archive.outputs.asset_name }}
+                  generate_release_notes: true
+                  fail_on_unmatched_files: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
