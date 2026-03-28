@@ -30,7 +30,12 @@ export class SetupWizard {
     /**
      * Reset MCP Server (delete folder) and reinstall
      */
-    static async resetAndReinstall(projectDir: string, projectName: string): Promise<boolean> {
+    static async resetAndReinstall(
+        projectDir: string,
+        projectName: string,
+        projectId: string = '',
+        winCCOAVersion: string = ''
+    ): Promise<boolean> {
         ExtensionOutputChannel.info(`Resetting MCP Server for project: ${projectName}`);
 
         const mcpPath = path.join(projectDir, this.MCP_SUBPATH);
@@ -71,7 +76,13 @@ export class SetupWizard {
             });
 
             ExtensionOutputChannel.info('✅ MCP Server reset and reinstalled successfully');
-            ExtensionOutputChannel.info('Note: Manager entry in config/progs was NOT modified');
+
+            // Check and add manager (add if missing, skip if already present)
+            const mcpServerPath = path.join(projectDir, this.MCP_SUBPATH);
+            ExtensionOutputChannel.info('Checking MCP Server manager...');
+            await ManagerInstallationHelper.addManagerAutomatically(
+                projectDir, mcpServerPath, projectId, winCCOAVersion
+            );
 
             return true;
 
@@ -85,7 +96,12 @@ export class SetupWizard {
     /**
      * Run auto-setup wizard
      */
-    static async runSetup(projectDir: string, projectName: string): Promise<boolean> {
+    static async runSetup(
+        projectDir: string,
+        projectName: string,
+        projectId: string = '',
+        winCCOAVersion: string = ''
+    ): Promise<boolean> {
         ExtensionOutputChannel.info(`Starting MCP Server setup for project: ${projectName}`);
 
         // Ask user for confirmation
@@ -122,15 +138,11 @@ export class SetupWizard {
                 progress.report({ increment: 100, message: 'Installation complete!' });
             });
 
-            // Ask user for manager installation
+            // Automatically add manager (runtime via PMON if running, else config/progs)
             const mcpServerPath = path.join(projectDir, this.MCP_SUBPATH);
-            const choice = await ManagerInstallationHelper.askUserForInstallation(mcpServerPath);
-            
-            if (choice === 'auto') {
-                await ManagerInstallationHelper.addManagerAutomatically(projectDir, mcpServerPath);
-            } else if (choice === 'manual') {
-                await ManagerInstallationHelper.showManualInstructions(projectDir, mcpServerPath);
-            }
+            await ManagerInstallationHelper.addManagerAutomatically(
+                projectDir, mcpServerPath, projectId, winCCOAVersion
+            );
 
             ExtensionOutputChannel.info('✅ MCP Server setup completed successfully');
             return true;

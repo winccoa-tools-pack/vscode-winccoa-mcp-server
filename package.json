@@ -3,7 +3,7 @@
   "displayName": "WinCC OA MCP Server",
   "description": "Model Context Protocol server for WinCC OA - enables AI assistants to interact with WinCC OA projects",
   "publisher": "RichardJanisch",
-  "version": "1.6.2",
+  "version": "1.8.0",
   "preview": true,
   "author": "Richard Janisch",
   "license": "MIT",
@@ -691,7 +691,7 @@
     "@typescript-eslint/parser": "^6.10.0",
     "@vscode/test-electron": "^2.3.9",
     "@vscode/vsce": "^3.7.1",
-    "@winccoa-tools-pack/npm-winccoa-core": "^0.1.1",
+
     "chai": "^6.2.2",
     "eslint": "^8.50.0",
     "glob": "^13.0.0",
@@ -704,6 +704,7 @@
     "vscode-test": "^1.6.1"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@winccoa-tools-pack/npm-winccoa-core": "0.2.6"
   }
 }

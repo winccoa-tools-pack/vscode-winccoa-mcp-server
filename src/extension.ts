@@ -695,11 +695,11 @@ async function disconnect(): Promise<void> {
  */
 async function reconnect(): Promise<void> {
     ExtensionOutputChannel.info('Manual reconnect triggered...');
-    
+
     try {
         // Get current config
         const { config, error } = await configDetector.detectConfig();
-        
+
         if (!config) {
             await handleDetectionError(error);
             statusBar.setStatus('error');
@@ -707,26 +707,94 @@ async function reconnect(): Promise<void> {
         }
 
         ExtensionOutputChannel.info(`Connecting to MCP Server: ${config.url}`);
-        
-        // Create new client (disposes old one, starts new monitor)
-        await createClient(config);
-        
+
+        // Try to connect – if it fails, auto-start the manager and retry once
+        try {
+            await createClient(config);
+        } catch (connectErr: any) {
+            ExtensionOutputChannel.warn(
+                `Initial connect failed (${connectErr.message}) – attempting to start MCP Server manager...`
+            );
+
+            const started = await tryStartMcpManager(config);
+            if (started) {
+                // Wait for the manager to initialise its HTTP endpoint
+                ExtensionOutputChannel.info('Manager started – waiting 6 s for HTTP endpoint...');
+                await new Promise(resolve => setTimeout(resolve, 6000));
+                // Retry connection
+                await createClient(config);
+            } else {
+                // Cannot start manager automatically – re-throw original error
+                throw connectErr;
+            }
+        }
+
         // Reset monitor reconnect attempts
         if (connectionMonitor) {
             connectionMonitor.reset();
         }
-        
+
         statusBar.setStatus('connected');
         ExtensionOutputChannel.info(`✅ Connected to ${config.projectName || 'WinCC OA'} MCP Server`);
-        
+
         vscode.window.showInformationMessage(
             `Connected to ${config.projectName || 'WinCC OA'} MCP Server`
         );
-        
+
     } catch (error: any) {
         ExtensionOutputChannel.error(`Reconnect failed: ${error.message}`);
         statusBar.setStatus('error');
         vscode.window.showErrorMessage(`Failed to connect: ${error.message}`);
+    }
+}
+
+/**
+ * Try to start the MCP Server manager via PmonComponent.
+ * Returns true when a matching manager was found and the start command succeeded.
+ */
+async function tryStartMcpManager(config: McpConfig): Promise<boolean> {
+    const { PmonComponent } = await import('@winccoa-tools-pack/npm-winccoa-core');
+    const projectId = config.projectId;
+    const version   = config.winCCOAVersion;
+
+    if (!projectId) {
+        ExtensionOutputChannel.warn('tryStartMcpManager: no projectId in config – skipping');
+        return false;
+    }
+
+    try {
+        const pmon = new PmonComponent();
+        if (version) {
+            try { pmon.setVersion(version); } catch {
+                ExtensionOutputChannel.warn(`Could not set WinCC OA version ${version} for PMON`);
+            }
+        }
+
+        // Find the MCP Server manager by matching startOptions
+        const managers = await pmon.getManagerOptionsList(projectId);
+        const mcpIndex = managers.findIndex(
+            m => m.component === 'node' && m.startOptions?.includes('mcpServer')
+        );
+
+        if (mcpIndex < 0) {
+            ExtensionOutputChannel.warn('tryStartMcpManager: MCP Server manager not found in PMON list');
+            return false;
+        }
+
+        ExtensionOutputChannel.info(`Starting MCP Server manager at index ${mcpIndex}...`);
+        const exitCode = await pmon.startManager(projectId, mcpIndex);
+
+        if (exitCode === 0) {
+            ExtensionOutputChannel.info('✅ MCP Server manager start command sent successfully');
+            return true;
+        }
+
+        ExtensionOutputChannel.warn(`PMON startManager returned exit code ${exitCode}`);
+        return false;
+
+    } catch (err: any) {
+        ExtensionOutputChannel.warn(`tryStartMcpManager failed: ${err.message}`);
+        return false;
     }
 }
 
@@ -842,7 +910,9 @@ async function runSetup(): Promise<void> {
             }
             
             // User wants to reinstall - call resetAndReinstall
-            const success = await SetupWizard.resetAndReinstall(projectPath, project.name || project.id);
+            const success = await SetupWizard.resetAndReinstall(
+                projectPath, project.name || project.id, project.id, project.version
+            );
             
             if (success) {
                 configDetector.invalidateCache();
@@ -852,7 +922,9 @@ async function runSetup(): Promise<void> {
         }
 
         // Run setup wizard (fresh install)
-        const success = await SetupWizard.runSetup(projectPath, project.name || project.id);
+        const success = await SetupWizard.runSetup(
+            projectPath, project.name || project.id, project.id, project.version
+        );
         
         if (success) {
             // Invalidate cache and reconnect
@@ -934,7 +1006,9 @@ async function resetAndReinstall(): Promise<void> {
         }
 
         // Call SetupWizard.resetAndReinstall()
-        const success = await SetupWizard.resetAndReinstall(projectPath, project.name || project.id);
+        const success = await SetupWizard.resetAndReinstall(
+            projectPath, project.name || project.id, project.id, project.version
+        );
 
         if (success) {
             vscode.window.showInformationMessage('MCP Server reset and reinstalled successfully!');

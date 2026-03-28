@@ -16,6 +16,10 @@ export interface McpConfig {
     authType: 'bearer' | 'basic'; // McpClient only supports bearer/basic
     projectPath?: string;
     projectName?: string;
+    /** WinCC OA project ID/name (used for PMON commands) */
+    projectId?: string;
+    /** WinCC OA version string, e.g. '3.21' (used to locate pmon binary) */
+    winCCOAVersion?: string;
 }
 
 export type DetectionError =
@@ -61,6 +65,8 @@ export class ProjectConfigDetector {
                 authType: envConfig.authType === 'bearer' ? 'bearer' : 'bearer', // Default to bearer
                 projectPath: project.path,
                 projectName: project.name,
+                projectId: project.id,
+                winCCOAVersion: project.version,
             };
 
             // Update cache
@@ -87,7 +93,7 @@ export class ProjectConfigDetector {
     /**
      * Get active WinCC OA project from Project Admin Extension
      */
-    private async getActiveProject(): Promise<{ name: string; path: string } | null> {
+    private async getActiveProject(): Promise<{ name: string; path: string; id: string; version: string } | null> {
         const projectAdmin = vscode.extensions.getExtension('RichardJanisch.winccoa-project-admin');
 
         if (!projectAdmin) {
@@ -116,6 +122,8 @@ export class ProjectConfigDetector {
         return {
             name: project.name,
             path: project.projectDir, // Project Admin API returns projectDir, not path
+            id: project.id,
+            version: project.version ?? '',
         };
     }
 

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-03-28
+
+> Based on [PR #37](https://github.com/winccoa-tools-pack/vscode-winccoa-mcp-server/pull/37) by [@JaMa-95](https://github.com/JaMa-95)
+
+### ✨ Added
+- **Public Extension API**: New `McpServerExtensionApi` interface allows other VS Code extensions (e.g. `vscode-winccoa-database`) to consume MCP connection info via `vscode.extensions.getExtension(...).activate()`
+  - `getConnectionInfo()` — returns URL, token, auth type and project details
+  - `getConnectionState()` — returns current connection state (`connected` | `disconnected` | `connecting` | `error`)
+  - `onDidChangeConnection` — event fired on connection state or config changes
+
+### 🔧 Improved
+- **GitHub Release Installation**: Setup wizard now downloads the latest MCP Server release artifact (`.tar.gz`) directly from GitHub Releases instead of cloning the git repository or using npm install
+  - Automatic detection of subdirectory prefix inside the release archive
+  - No `simple-git` dependency required anymore
+  - `winccoa-manager` is now bundled in the release artifact — no separate manager installation step
+  - `oaInstallPath` parameter removed from public setup methods (no longer needed)
+
+### 🐛 Fixed
+- **Manager Installation via PmonComponent**: Setup wizard now correctly adds the WinCC OA manager at runtime using `PmonComponent.insertManagerAt()` when the project is already running
+  - `runSetup` (fresh install): automatically adds the manager after installation — no more manual dialog
+  - `resetAndReinstall` (reinit): always deletes and re-downloads the package, then checks if manager already exists; adds it only if missing
+  - Fallback to `config/progs` write when PMON is not reachable (e.g. project not running)
+  - Persistent `config/progs` entry always written for restart durability
+  - Script path corrected to `mcpServer/index.js` (relative from `javascript/` working dir)
+  - Manager start mode set to **Manual** — started on demand, not automatically with the project
+- **Auto-Start on Connect**: When the HTTP endpoint is not reachable during connect/reconnect, the manager is started automatically via `PmonComponent.startManager()` — 6 s wait for HTTP endpoint, graceful fallback if PMON unavailable
+
+### 🏗️ Build
+- Added `.vscodeignore` to exclude dev files (scripts, docs, test fixtures) from VSIX package
+
+### 📊 Dependencies
+- Removed: `simple-git` (replaced by direct GitHub Release download)
+- Moved: `@winccoa-tools-pack/npm-winccoa-core` from devDependencies → dependencies (required for `PmonComponent` runtime manager installation), updated to `0.2.6`
+
 ## [1.7.0] - 2026-02-14
 
 ### ✨ Added
