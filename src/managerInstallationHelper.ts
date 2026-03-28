@@ -9,7 +9,11 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { PmonComponent, ProjEnvManagerOptions, ProjEnvManagerStartMode } from '@winccoa-tools-pack/npm-winccoa-core';
+import {
+    PmonComponent,
+    ProjEnvManagerOptions,
+    ProjEnvManagerStartMode,
+} from '@winccoa-tools-pack/npm-winccoa-core';
 import { ManagerConfigWriter, ManagerEntry } from './managerConfigWriter';
 import { ExtensionOutputChannel } from './extensionOutput';
 
@@ -38,14 +42,16 @@ export class ManagerInstallationHelper {
         projectPath: string,
         mcpServerPath: string,
         projectId: string,
-        winCCOAVersion: string
+        winCCOAVersion: string,
     ): Promise<boolean> {
         try {
             ExtensionOutputChannel.info(`Adding MCP Server manager for project: ${projectId}`);
 
             // ── Step 1: Check persistent config/progs ────────────────────────────
             const existsInConfig = await ManagerConfigWriter.managerExists(
-                projectPath, 'node', MCP_MANAGER_KEY
+                projectPath,
+                'node',
+                MCP_MANAGER_KEY,
             );
             if (existsInConfig) {
                 ExtensionOutputChannel.info('MCP Server manager already present in config/progs');
@@ -56,14 +62,18 @@ export class ManagerInstallationHelper {
             try {
                 const pmon = new PmonComponent();
                 if (winCCOAVersion) {
-                    try { pmon.setVersion(winCCOAVersion); } catch {
-                        ExtensionOutputChannel.warn(`Could not set WinCC OA version ${winCCOAVersion} for PMON, using auto-detect`);
+                    try {
+                        pmon.setVersion(winCCOAVersion);
+                    } catch {
+                        ExtensionOutputChannel.warn(
+                            `Could not set WinCC OA version ${winCCOAVersion} for PMON, using auto-detect`,
+                        );
                     }
                 }
 
                 const managers = await pmon.getManagerOptionsList(projectId);
                 const existsInPmon = managers.some(
-                    m => m.component === 'node' && m.startOptions?.includes(MCP_MANAGER_KEY)
+                    (m) => m.component === 'node' && m.startOptions?.includes(MCP_MANAGER_KEY),
                 );
 
                 if (existsInPmon) {
@@ -76,21 +86,29 @@ export class ManagerInstallationHelper {
                         secondToKill: 30,
                         resetMin: 1,
                         resetStartCounter: 3,
-                        startOptions: MCP_SCRIPT_REL
+                        startOptions: MCP_SCRIPT_REL,
                     };
                     const insertPosition = managers.length;
-                    const exitCode = await pmon.insertManagerAt(managerOptions, projectId, insertPosition);
+                    const exitCode = await pmon.insertManagerAt(
+                        managerOptions,
+                        projectId,
+                        insertPosition,
+                    );
 
                     if (exitCode === 0) {
-                        ExtensionOutputChannel.info('✅ MCP Server manager inserted into PMON at runtime');
+                        ExtensionOutputChannel.info(
+                            '✅ MCP Server manager inserted into PMON at runtime',
+                        );
                         runtimeSuccess = true;
                     } else {
-                        ExtensionOutputChannel.warn(`PMON insertManagerAt returned exit code ${exitCode}, falling back to config/progs`);
+                        ExtensionOutputChannel.warn(
+                            `PMON insertManagerAt returned exit code ${exitCode}, falling back to config/progs`,
+                        );
                     }
                 }
             } catch (pmonErr: any) {
                 ExtensionOutputChannel.warn(
-                    `PMON not reachable (${pmonErr.message}) – falling back to config/progs`
+                    `PMON not reachable (${pmonErr.message}) – falling back to config/progs`,
                 );
             }
 
@@ -103,7 +121,7 @@ export class ManagerInstallationHelper {
                         secKill: 30,
                         restartCount: 3,
                         resetMin: 1,
-                        options: MCP_SCRIPT_REL
+                        options: MCP_SCRIPT_REL,
                     };
                     await ManagerConfigWriter.addManager(projectPath, entry);
                     ExtensionOutputChannel.info('✅ MCP Server manager added to config/progs');
@@ -118,36 +136,32 @@ export class ManagerInstallationHelper {
             // ── Notify user ───────────────────────────────────────────────────────
             if (runtimeSuccess) {
                 vscode.window.showInformationMessage(
-                    '✅ MCP Server manager added. The project will start it automatically.'
+                    '✅ MCP Server manager added. The project will start it automatically.',
                 );
             } else {
                 vscode.window.showInformationMessage(
                     '✅ MCP Server installed!\n\n' +
-                    '⚠️ Restart the WinCC OA project to activate the MCP Server manager.',
+                        '⚠️ Restart the WinCC OA project to activate the MCP Server manager.',
                     { modal: true },
-                    'OK'
+                    'OK',
                 );
             }
 
             return true;
-
         } catch (error: any) {
             ExtensionOutputChannel.error(`Failed to add manager: ${error.message}`);
             vscode.window.showErrorMessage(`Failed to add MCP Server manager: ${error.message}`);
             return false;
         }
     }
-    
+
     /**
      * Show manual installation instructions
      */
-    static async showManualInstructions(
-        projectPath: string,
-        mcpServerPath: string
-    ): Promise<void> {
+    static async showManualInstructions(projectPath: string, mcpServerPath: string): Promise<void> {
         const scriptPath = path.join(mcpServerPath, 'index.js');
         const nextNum = await ManagerConfigWriter.getNextFreeManagerNumber(projectPath);
-        
+
         const instructions = [
             '# Manual MCP Server Manager Setup',
             '',
@@ -183,21 +197,21 @@ export class ManagerInstallationHelper {
             '---',
             '',
             '**Copy the options line for easy use:**',
-            `\`-num ${nextNum} mcpServer ${scriptPath}\``
+            `\`-num ${nextNum} mcpServer ${scriptPath}\``,
         ].join('\n');
-        
+
         // Create webview panel for instructions
         const panel = vscode.window.createWebviewPanel(
             'mcpManagerInstructions',
             'MCP Server Manager - Manual Setup',
             vscode.ViewColumn.One,
             {
-                enableScripts: false
-            }
+                enableScripts: false,
+            },
         );
-        
+
         panel.webview.html = this.getInstructionsHtml(instructions, scriptPath, nextNum);
-        
+
         // Also log to output channel
         ExtensionOutputChannel.info('='.repeat(60));
         ExtensionOutputChannel.info('MCP Server Manager - Manual Setup Instructions');
@@ -205,7 +219,7 @@ export class ManagerInstallationHelper {
         ExtensionOutputChannel.info(instructions);
         ExtensionOutputChannel.info('='.repeat(60));
     }
-    
+
     /**
      * Show manager configuration details
      */
@@ -217,17 +231,21 @@ export class ManagerInstallationHelper {
             `- Seconds to Kill: ${manager.secKill}`,
             `- Restart Count: ${manager.restartCount}`,
             `- Reset Min: ${manager.resetMin}`,
-            `- Options: ${manager.options}`
+            `- Options: ${manager.options}`,
         ].join('\n');
-        
+
         vscode.window.showInformationMessage(details);
         ExtensionOutputChannel.info(details);
     }
-    
+
     /**
      * Generate HTML for instructions webview
      */
-    private static getInstructionsHtml(instructions: string, scriptPath: string, managerNum: number): string {
+    private static getInstructionsHtml(
+        instructions: string,
+        scriptPath: string,
+        managerNum: number,
+    ): string {
         // Convert markdown to simple HTML
         const htmlContent = instructions
             .replace(/^# (.*)/gm, '<h1>$1</h1>')
@@ -239,9 +257,9 @@ export class ManagerInstallationHelper {
             .replace(/^\d+\. (.*)/gm, '<li>$1</li>')
             .replace(/^- (.*)/gm, '<li>$1</li>')
             .replace(/\n/g, '<br>');
-        
+
         const optionsLine = `-num ${managerNum} mcpServer ${scriptPath}`;
-        
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>

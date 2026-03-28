@@ -163,7 +163,9 @@ export class McpClient {
                 headers: {
                     'Content-Type': 'application/json',
                     Accept: 'application/json, text/event-stream',
-                    Authorization: `${this.config.authType === 'bearer' ? 'Bearer' : 'Basic'} ${this.config.token}`,
+                    Authorization: `${this.config.authType === 'bearer' ? 'Bearer' : 'Basic'} ${
+                        this.config.token
+                    }`,
                 },
                 body: JSON.stringify(request),
                 signal: controller.signal,

@@ -407,12 +407,15 @@ class GetManagerStatusTool implements vscode.LanguageModelTool<{ managerName: st
 /**
  * Tool 6: Create Datapoint
  */
-class CreateDatapointTool implements vscode.LanguageModelTool<{
-    dpeName: string;
-    dpType: string;
-    systemId?: number;
-    dpId?: number;
-}> {
+class CreateDatapointTool
+    implements
+        vscode.LanguageModelTool<{
+            dpeName: string;
+            dpType: string;
+            systemId?: number;
+            dpId?: number;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -473,10 +476,13 @@ class CreateDatapointTool implements vscode.LanguageModelTool<{
 /**
  * Tool 7: Set Datapoint Value
  */
-class DpSetTool implements vscode.LanguageModelTool<{
-    dpeName: string;
-    value: any;
-}> {
+class DpSetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpeName: string;
+            value: any;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -533,10 +539,13 @@ class DpSetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 8: Create Datapoint Type
  */
-class CreateDpTypeTool implements vscode.LanguageModelTool<{
-    name: string;
-    structure: any;
-}> {
+class CreateDpTypeTool
+    implements
+        vscode.LanguageModelTool<{
+            name: string;
+            structure: any;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -628,13 +637,16 @@ class CreateDpTypeTool implements vscode.LanguageModelTool<{
 /**
  * Tool 9: Set Alarm Configuration
  */
-class AlarmSetTool implements vscode.LanguageModelTool<{
-    dpe: string;
-    direction: 'ASC' | 'DESC';
-    thresholds?: number[];
-    alarmClasses?: string[];
-    force?: boolean;
-}> {
+class AlarmSetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpe: string;
+            direction: 'ASC' | 'DESC';
+            thresholds?: number[];
+            alarmClasses?: string[];
+            force?: boolean;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -704,9 +716,12 @@ class AlarmSetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 10: Delete Alarm Configuration
  */
-class AlarmDeleteTool implements vscode.LanguageModelTool<{
-    dpe: string;
-}> {
+class AlarmDeleteTool
+    implements
+        vscode.LanguageModelTool<{
+            dpe: string;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -758,11 +773,14 @@ class AlarmDeleteTool implements vscode.LanguageModelTool<{
 /**
  * Tool 11: Set Archive Configuration
  */
-class ArchiveSetTool implements vscode.LanguageModelTool<{
-    dpe: string;
-    archiveClass?: string;
-    force?: boolean;
-}> {
+class ArchiveSetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpe: string;
+            archiveClass?: string;
+            force?: boolean;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -823,13 +841,16 @@ class ArchiveSetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 12: Set Common Configuration
  */
-class CommonSetTool implements vscode.LanguageModelTool<{
-    dpe: string;
-    description?: string | { [lang: string]: string };
-    alias?: string;
-    format?: string | { [lang: string]: string };
-    unit?: string | { [lang: string]: string };
-}> {
+class CommonSetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpe: string;
+            description?: string | { [lang: string]: string };
+            alias?: string;
+            format?: string | { [lang: string]: string };
+            unit?: string | { [lang: string]: string };
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -895,14 +916,17 @@ class CommonSetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 13: Set PV Range
  */
-class PvRangeSetTool implements vscode.LanguageModelTool<{
-    dpe: string;
-    min: number;
-    max: number;
-    includeMin?: boolean;
-    includeMax?: boolean;
-    force?: boolean;
-}> {
+class PvRangeSetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpe: string;
+            min: number;
+            max: number;
+            includeMin?: boolean;
+            includeMax?: boolean;
+            force?: boolean;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -972,9 +996,12 @@ class PvRangeSetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 14: Get Modbus Address Configuration
  */
-class ModbusAddressGetTool implements vscode.LanguageModelTool<{
-    dpName: string;
-}> {
+class ModbusAddressGetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpName: string;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async invoke(
@@ -1008,16 +1035,19 @@ class ModbusAddressGetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 15: Set Modbus Address Configuration
  */
-class ModbusAddressSetTool implements vscode.LanguageModelTool<{
-    dpName: string;
-    connectionId: number;
-    functionCode: number;
-    registerAddress: number;
-    datatype?: number;
-    direction?: number;
-    active?: boolean;
-    lowlevel?: boolean;
-}> {
+class ModbusAddressSetTool
+    implements
+        vscode.LanguageModelTool<{
+            dpName: string;
+            connectionId: number;
+            functionCode: number;
+            registerAddress: number;
+            datatype?: number;
+            direction?: number;
+            active?: boolean;
+            lowlevel?: boolean;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(
@@ -1107,9 +1137,12 @@ class ModbusAddressSetTool implements vscode.LanguageModelTool<{
 /**
  * Tool 16: Remove Modbus Address Configuration
  */
-class ModbusAddressRemoveTool implements vscode.LanguageModelTool<{
-    dpName: string;
-}> {
+class ModbusAddressRemoveTool
+    implements
+        vscode.LanguageModelTool<{
+            dpName: string;
+        }>
+{
     constructor(private getClient: () => McpClient) {}
 
     async prepareInvocation(

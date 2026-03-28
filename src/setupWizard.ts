@@ -1,6 +1,6 @@
 /**
  * MCP Server Setup Wizard
- * 
+ *
  * Automatically installs MCP Server if not present in project
  */
 
@@ -34,7 +34,7 @@ export class SetupWizard {
         projectDir: string,
         projectName: string,
         projectId: string = '',
-        winCCOAVersion: string = ''
+        winCCOAVersion: string = '',
     ): Promise<boolean> {
         ExtensionOutputChannel.info(`Resetting MCP Server for project: ${projectName}`);
 
@@ -49,31 +49,39 @@ export class SetupWizard {
             }
 
             // Step 2: Delete MCP Server folder and reinstall
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: `Resetting MCP Server for ${projectName}`,
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ increment: 0, message: 'Deleting MCP Server folder...' });
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Resetting MCP Server for ${projectName}`,
+                    cancellable: false,
+                },
+                async (progress) => {
+                    progress.report({ increment: 0, message: 'Deleting MCP Server folder...' });
 
-                try {
-                    await fs.rm(mcpPath, { recursive: true, force: true });
-                    ExtensionOutputChannel.info(`Deleted folder: ${mcpPath}`);
-                } catch (error: any) {
-                    ExtensionOutputChannel.warn(`Could not delete folder (may not exist): ${error.message}`);
-                }
+                    try {
+                        await fs.rm(mcpPath, { recursive: true, force: true });
+                        ExtensionOutputChannel.info(`Deleted folder: ${mcpPath}`);
+                    } catch (error: any) {
+                        ExtensionOutputChannel.warn(
+                            `Could not delete folder (may not exist): ${error.message}`,
+                        );
+                    }
 
-                progress.report({ increment: 20, message: 'Downloading from GitHub releases...' });
-                await this.installFromGithubRelease(projectDir);
+                    progress.report({
+                        increment: 20,
+                        message: 'Downloading from GitHub releases...',
+                    });
+                    await this.installFromGithubRelease(projectDir);
 
-                progress.report({ increment: 85, message: 'Generating security token...' });
-                const token = this.generateToken();
+                    progress.report({ increment: 85, message: 'Generating security token...' });
+                    const token = this.generateToken();
 
-                progress.report({ increment: 95, message: 'Creating configuration...' });
-                await this.createEnvFile(projectDir, token);
+                    progress.report({ increment: 95, message: 'Creating configuration...' });
+                    await this.createEnvFile(projectDir, token);
 
-                progress.report({ increment: 100, message: 'Reset complete!' });
-            });
+                    progress.report({ increment: 100, message: 'Reset complete!' });
+                },
+            );
 
             ExtensionOutputChannel.info('✅ MCP Server reset and reinstalled successfully');
 
@@ -81,11 +89,13 @@ export class SetupWizard {
             const mcpServerPath = path.join(projectDir, this.MCP_SUBPATH);
             ExtensionOutputChannel.info('Checking MCP Server manager...');
             await ManagerInstallationHelper.addManagerAutomatically(
-                projectDir, mcpServerPath, projectId, winCCOAVersion
+                projectDir,
+                mcpServerPath,
+                projectId,
+                winCCOAVersion,
             );
 
             return true;
-
         } catch (error: any) {
             ExtensionOutputChannel.error(`Reset failed: ${error.message}`);
             vscode.window.showErrorMessage(`MCP Server reset failed: ${error.message}`);
@@ -100,7 +110,7 @@ export class SetupWizard {
         projectDir: string,
         projectName: string,
         projectId: string = '',
-        winCCOAVersion: string = ''
+        winCCOAVersion: string = '',
     ): Promise<boolean> {
         ExtensionOutputChannel.info(`Starting MCP Server setup for project: ${projectName}`);
 
@@ -109,7 +119,7 @@ export class SetupWizard {
             `MCP Server not found in project "${projectName}". Install now?`,
             { modal: true },
             'Install',
-            'Skip'
+            'Skip',
         );
 
         if (answer !== 'Install') {
@@ -118,35 +128,43 @@ export class SetupWizard {
         }
 
         try {
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: `Installing MCP Server for ${projectName}`,
-                cancellable: false
-            }, async (progress) => {
-                // Step 1: Download and install from latest GitHub release
-                progress.report({ increment: 0, message: 'Downloading from GitHub releases...' });
-                await this.installFromGithubRelease(projectDir);
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Installing MCP Server for ${projectName}`,
+                    cancellable: false,
+                },
+                async (progress) => {
+                    // Step 1: Download and install from latest GitHub release
+                    progress.report({
+                        increment: 0,
+                        message: 'Downloading from GitHub releases...',
+                    });
+                    await this.installFromGithubRelease(projectDir);
 
-                // Step 2: Generate Token
-                progress.report({ increment: 80, message: 'Generating security token...' });
-                const token = this.generateToken();
+                    // Step 2: Generate Token
+                    progress.report({ increment: 80, message: 'Generating security token...' });
+                    const token = this.generateToken();
 
-                // Step 3: Create .env File
-                progress.report({ increment: 90, message: 'Creating configuration...' });
-                await this.createEnvFile(projectDir, token);
+                    // Step 3: Create .env File
+                    progress.report({ increment: 90, message: 'Creating configuration...' });
+                    await this.createEnvFile(projectDir, token);
 
-                progress.report({ increment: 100, message: 'Installation complete!' });
-            });
+                    progress.report({ increment: 100, message: 'Installation complete!' });
+                },
+            );
 
             // Automatically add manager (runtime via PMON if running, else config/progs)
             const mcpServerPath = path.join(projectDir, this.MCP_SUBPATH);
             await ManagerInstallationHelper.addManagerAutomatically(
-                projectDir, mcpServerPath, projectId, winCCOAVersion
+                projectDir,
+                mcpServerPath,
+                projectId,
+                winCCOAVersion,
             );
 
             ExtensionOutputChannel.info('✅ MCP Server setup completed successfully');
             return true;
-
         } catch (error: any) {
             ExtensionOutputChannel.error(`Setup failed: ${error.message}`);
             vscode.window.showErrorMessage(`MCP Server installation failed: ${error.message}`);
@@ -159,7 +177,10 @@ export class SetupWizard {
      */
     private static async installFromGithubRelease(projectDir: string): Promise<void> {
         const config = vscode.workspace.getConfiguration('winccoa.mcp');
-        const githubRepo = config.get<string>('githubRepo', 'winccoa-tools-pack/winccoa-mcp-server');
+        const githubRepo = config.get<string>(
+            'githubRepo',
+            'winccoa-tools-pack/winccoa-mcp-server',
+        );
 
         const mcpServerDir = path.join(projectDir, this.MCP_SUBPATH);
         const tempFile = path.join(projectDir, 'javascript', `.mcp-release-${Date.now()}.tar.gz`);
@@ -169,17 +190,22 @@ export class SetupWizard {
         try {
             // Step 1: Get latest release info from GitHub API
             const releaseInfo = await this.fetchJson(
-                `https://api.github.com/repos/${githubRepo}/releases/latest`
+                `https://api.github.com/repos/${githubRepo}/releases/latest`,
             );
             const tagName: string = releaseInfo.tag_name;
-            const assets: Array<{ name: string; browser_download_url: string }> = releaseInfo.assets ?? [];
+            const assets: Array<{ name: string; browser_download_url: string }> =
+                releaseInfo.assets ?? [];
 
-            const tarGzAsset = assets.find(a => a.name.endsWith('.tar.gz'));
+            const tarGzAsset = assets.find((a) => a.name.endsWith('.tar.gz'));
             if (!tarGzAsset) {
-                throw new Error(`No .tar.gz release asset found in release ${tagName} of ${githubRepo}`);
+                throw new Error(
+                    `No .tar.gz release asset found in release ${tagName} of ${githubRepo}`,
+                );
             }
 
-            ExtensionOutputChannel.info(`Found release: ${tagName}, downloading: ${tarGzAsset.name}`);
+            ExtensionOutputChannel.info(
+                `Found release: ${tagName}, downloading: ${tarGzAsset.name}`,
+            );
 
             // Step 2: Download tar.gz to a temp file
             await fs.mkdir(path.dirname(tempFile), { recursive: true });
@@ -187,12 +213,16 @@ export class SetupWizard {
             ExtensionOutputChannel.info(`Downloaded ${tarGzAsset.name}`);
 
             // Step 3: Extract to a temporary directory, then rename to mcpServer
-            const tempExtractDir = path.join(projectDir, 'javascript', `.mcp-extract-${Date.now()}`);
+            const tempExtractDir = path.join(
+                projectDir,
+                'javascript',
+                `.mcp-extract-${Date.now()}`,
+            );
             await fs.mkdir(tempExtractDir, { recursive: true });
             const extractResult = await this.executeCommand(
                 'tar',
                 ['-xzf', tempFile, '-C', tempExtractDir],
-                projectDir
+                projectDir,
             );
             if (extractResult.exitCode !== 0) {
                 await fs.rm(tempExtractDir, { recursive: true, force: true });
@@ -201,11 +231,12 @@ export class SetupWizard {
 
             // Detect whether the archive had a subdirectory prefix
             const entries = await fs.readdir(tempExtractDir, { withFileTypes: true });
-            const subdirs = entries.filter(e => e.isDirectory());
-            const files = entries.filter(e => !e.isDirectory());
-            const sourceDir = (files.length === 0 && subdirs.length === 1)
-                ? path.join(tempExtractDir, subdirs[0].name)
-                : tempExtractDir;
+            const subdirs = entries.filter((e) => e.isDirectory());
+            const files = entries.filter((e) => !e.isDirectory());
+            const sourceDir =
+                files.length === 0 && subdirs.length === 1
+                    ? path.join(tempExtractDir, subdirs[0].name)
+                    : tempExtractDir;
 
             if (files.length === 0 && subdirs.length === 1) {
                 ExtensionOutputChannel.info(`Artifact directory: ${subdirs[0].name}`);
@@ -222,7 +253,6 @@ export class SetupWizard {
             ExtensionOutputChannel.info(`Installed to: ${mcpServerDir}`);
 
             ExtensionOutputChannel.info(`✅ MCP Server ${tagName} installed from GitHub release`);
-
         } finally {
             try {
                 await fs.rm(tempFile, { force: true });
@@ -234,32 +264,36 @@ export class SetupWizard {
      * Fetch JSON from a URL (HTTPS only)
      */
     private static fetchJson(url: string): Promise<any> {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const https = require('https');
         const parsed = new URL(url);
 
         return new Promise((resolve, reject) => {
-            https.get(
-                {
-                    hostname: parsed.hostname,
-                    path: parsed.pathname + parsed.search,
-                    headers: {
-                        'User-Agent': 'vscode-winccoa-mcp-server',
-                        'Accept': 'application/vnd.github+json'
-                    }
-                },
-                (response: any) => {
-                    let data = '';
-                    response.on('data', (chunk: Buffer) => { data += chunk; });
-                    response.on('end', () => {
-                        try {
-                            resolve(JSON.parse(data));
-                        } catch (e) {
-                            reject(new Error(`Failed to parse GitHub API response: ${e}`));
-                        }
-                    });
-                }
-            ).on('error', reject);
+            https
+                .get(
+                    {
+                        hostname: parsed.hostname,
+                        path: parsed.pathname + parsed.search,
+                        headers: {
+                            'User-Agent': 'vscode-winccoa-mcp-server',
+                            Accept: 'application/vnd.github+json',
+                        },
+                    },
+                    (response: any) => {
+                        let data = '';
+                        response.on('data', (chunk: Buffer) => {
+                            data += chunk;
+                        });
+                        response.on('end', () => {
+                            try {
+                                resolve(JSON.parse(data));
+                            } catch (e) {
+                                reject(new Error(`Failed to parse GitHub API response: ${e}`));
+                            }
+                        });
+                    },
+                )
+                .on('error', reject);
         });
     }
 
@@ -267,35 +301,47 @@ export class SetupWizard {
      * Download a file from a URL to a local path, following redirects
      */
     private static downloadFile(url: string, destPath: string): Promise<void> {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const https = require('https');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const http = require('http');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         const fsSync = require('fs');
 
         return new Promise((resolve, reject) => {
             const download = (downloadUrl: string) => {
                 const protocol = downloadUrl.startsWith('https') ? https : http;
-                protocol.get(downloadUrl, (response: any) => {
-                    if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307) {
-                        download(response.headers.location);
-                        return;
-                    }
-                    if (response.statusCode !== 200) {
-                        reject(new Error(`Download failed with HTTP ${response.statusCode}: ${downloadUrl}`));
-                        return;
-                    }
-                    const fileStream = fsSync.createWriteStream(destPath);
-                    response.pipe(fileStream);
-                    fileStream.on('finish', () => { fileStream.close(); resolve(); });
-                    fileStream.on('error', reject);
-                }).on('error', reject);
+                protocol
+                    .get(downloadUrl, (response: any) => {
+                        if (
+                            response.statusCode === 301 ||
+                            response.statusCode === 302 ||
+                            response.statusCode === 307
+                        ) {
+                            download(response.headers.location);
+                            return;
+                        }
+                        if (response.statusCode !== 200) {
+                            reject(
+                                new Error(
+                                    `Download failed with HTTP ${response.statusCode}: ${downloadUrl}`,
+                                ),
+                            );
+                            return;
+                        }
+                        const fileStream = fsSync.createWriteStream(destPath);
+                        response.pipe(fileStream);
+                        fileStream.on('finish', () => {
+                            fileStream.close();
+                            resolve();
+                        });
+                        fileStream.on('error', reject);
+                    })
+                    .on('error', reject);
             };
             download(url);
         });
     }
-
 
     /**
      * Generate secure random token
@@ -333,7 +379,7 @@ export class SetupWizard {
                 'MCP_CORS_ORIGINS=*',
                 'WINCCOA_FIELD=default',
                 'TOOLS=datapoints/dp_basic,datapoints/dp_types,archive/archive_query,common/common_query,pv_range/pv_range_query,manager/manager_list',
-                ''
+                '',
             ].join('\n');
         }
 
@@ -348,7 +394,7 @@ export class SetupWizard {
     private static async executeCommand(
         command: string,
         args: string[],
-        cwd: string
+        cwd: string,
     ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
         return new Promise((resolve, reject) => {
             const { spawn } = require('child_process');

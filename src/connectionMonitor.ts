@@ -182,7 +182,9 @@ export class ConnectionMonitor {
             await this.attemptReconnect();
         } else {
             ExtensionOutputChannel.error(
-                `Connection Monitor: Auto-reconnect ${this.config.autoReconnect ? 'exhausted' : 'disabled'}`,
+                `Connection Monitor: Auto-reconnect ${
+                    this.config.autoReconnect ? 'exhausted' : 'disabled'
+                }`,
             );
             this.onReconnectFailed();
             this.stop();

@@ -93,7 +93,12 @@ export class ProjectConfigDetector {
     /**
      * Get active WinCC OA project from Project Admin Extension
      */
-    private async getActiveProject(): Promise<{ name: string; path: string; id: string; version: string } | null> {
+    private async getActiveProject(): Promise<{
+        name: string;
+        path: string;
+        id: string;
+        version: string;
+    } | null> {
         const projectAdmin = vscode.extensions.getExtension('RichardJanisch.winccoa-project-admin');
 
         if (!projectAdmin) {

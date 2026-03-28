@@ -36,9 +36,14 @@
   "main": "dist/src/extension.js",
   "scripts": {
     "compile": "tsc -p ./",
+    "compile:tsc": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "lint": "eslint src/",
+    "lint:md": "markdownlint \"**/*.md\" --ignore node_modules --ignore dist",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "node dist/test/mcpClient.test.js",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "contributes": {
     "commands": [
@@ -682,6 +687,7 @@
     }
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.6",
     "@types/node": "^24.10.8",
@@ -691,10 +697,12 @@
     "@typescript-eslint/parser": "^6.10.0",
     "@vscode/test-electron": "^2.3.9",
     "@vscode/vsce": "^3.7.1",
+    "typescript-eslint": "^8.0.0",
 
     "chai": "^6.2.2",
-    "eslint": "^8.50.0",
+    "eslint": "^9.0.0",
     "glob": "^13.0.0",
+    "globals": "^15.0.0",
     "markdownlint-cli": "^0.36.0",
     "mocha": "^11.7.5",
     "prettier": "^2.8.8",

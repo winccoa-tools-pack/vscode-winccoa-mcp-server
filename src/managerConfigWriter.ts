@@ -115,7 +115,9 @@ export class ManagerConfigWriter {
             const restartCount = manager.restartCount.toString().padStart(8);
             const resetMin = manager.resetMin.toString().padStart(8);
 
-            const managerLine = `${manager.component.padEnd(16)} | ${startMode} |${secKill} |${restartCount} |${resetMin} |${finalOptions}`;
+            const managerLine = `${manager.component.padEnd(
+                16,
+            )} | ${startMode} |${secKill} |${restartCount} |${resetMin} |${finalOptions}`;
 
             // Insert new manager
             lines.splice(insertIndex, 0, managerLine);
