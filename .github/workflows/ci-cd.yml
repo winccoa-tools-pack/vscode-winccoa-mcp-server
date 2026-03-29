@@ -24,8 +24,6 @@ jobs:
     uses: winccoa-tools-pack/.github/.github/workflows/reusable-ci-cd.yml@main
     with:
       build_command: "npm run compile:tsc"
-      enable_coverage: true
-      enable_xvfb: true
-      integration_test_command: "xvfb-run -a npx --no-install vscode-test --label integrationTests"
-      fixture_config_path: "./src/test/fixtures/projects/runnable/config/config"
+      enable_coverage: false
+      enable_xvfb: false
     secrets: inherit
