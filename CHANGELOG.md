@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-03-29
+
+### 🐛 Fixed
+- **CI/CD Pipeline**: Removed non-existent VSCode integration test configuration
+  - Disabled `enable_coverage` (no integration tests to measure)
+  - Disabled `enable_xvfb` (no VSCode UI tests)
+  - Removed `integration_test_command` (no `vscode-test` setup exists)
+  - Pipeline now only runs TypeScript compilation check
+
+## [1.9.1] - 2026-03-29
+
 ### ✨ Added
 - **Port Configuration UI**: New "Change Port" action in Server Info dialog
   - Input validation (1024-65535, avoid port 3000)
