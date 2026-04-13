@@ -68,7 +68,7 @@ jobs:
         uses: ./.github/actions/generate-changelog
 
       - name: Upsert PR comment
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- winccoa-changelog-preview -->';
