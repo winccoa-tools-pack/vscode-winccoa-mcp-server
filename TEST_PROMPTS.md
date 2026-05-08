@@ -1,9 +1,10 @@
-# Test Prompts für WinCC OA Language Model Tools
+# Test Prompts for WinCC OA MCP Tools
 
-## 🧪 Test-Szenarien für Copilot Chat
+## 🧪 Test scenarios for Copilot Chat
 
-Diese Prompts testen die autonome Tool-Nutzung durch GitHub Copilot.
-**WICHTIG:** Prompts OHNE `@winccoa` Präfix eingeben - Copilot soll Tools selbst erkennen!
+These prompts help validate that Copilot can use the WinCC OA MCP tools via VS Code's MCP integration.
+
+No special chat participant prefix (like `@winccoa`) is required.
 
 ---
 
@@ -11,7 +12,7 @@ Diese Prompts testen die autonome Tool-Nutzung durch GitHub Copilot.
 
 ### Deutsch
 ```
-Wie viele Manager laufen gerade?oka
+Wie viele Manager laufen gerade?
 ```
 ```
 Zeig mir alle WinCC OA Manager
