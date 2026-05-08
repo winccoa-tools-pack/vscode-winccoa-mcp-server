@@ -70,14 +70,9 @@ The goal is to enable developers to use natural language commands to:
 
 ### 🤖 Language Model Tools
 
-**6 tools available for GitHub Copilot autonomous access:**
+This extension no longer registers Copilot-specific **Language Model Tools**.
 
-- `list_managers` - List all WinCC OA managers with status
-- `search_datapoints` - Search datapoints by pattern
-- `get_datapoint_value` - Get current datapoint values
-- `get_datapoint_type` - Get datapoint type information
-- `get_manager_status` - Get detailed manager status
-- `execute_script` - Execute CTL scripts with arguments
+Instead, it installs/configures an MCP server and writes/updates VS Code's native MCP configuration (`mcp.servers`) so Copilot can call the server's tools directly.
 
 ### ⚙️ User Settings
 
@@ -340,14 +335,14 @@ Available via Command Palette (`Ctrl+Shift+P`):
 
 ## 📚 Requirements
 
-- **VS Code**: 1.108.0 or higher
+- **VS Code**: 1.110.0 or higher
 - **WinCC OA**: 3.21 or higher (officially supported)
 - **Node.js**: 14 or higher (for MCP Server runtime)
 - **WinCC OA Project Admin Extension**: Required for automatic project detection
 
 ---
 
-## � License
+## License
 
 MIT © Richard Janisch - See [LICENSE](LICENSE) file for details
 
@@ -356,5 +351,5 @@ MIT © Richard Janisch - See [LICENSE](LICENSE) file for details
 ## 🙏 Acknowledgments
 
 - WinCC OA development team for the MCP Server implementation
-- GitHub Copilot team for Language Model Tools API
+- GitHub Copilot / VS Code team for MCP integration
 - VS Code extension development community
