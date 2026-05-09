@@ -10,7 +10,7 @@ No special chat participant prefix (like `@winccoa`) is required.
 
 ## ✅ Tool 1: winccoa_list_managers
 
-### Deutsch
+### German
 ```
 Wie viele Manager laufen gerade?
 ```
@@ -38,16 +38,16 @@ Which processes are active?
 List all managers with their status
 ```
 
-**Erwartetes Verhalten:**
-- Tool `winccoa_list_managers` wird aufgerufen
-- Copilot zeigt Anzahl und Status der Manager
-- Antwort enthält: Name, Status (running/stopped), PID
+**Expected behavior:**
+- Tool `winccoa_list_managers` is called
+- Copilot shows manager count and status
+- Response includes: name, status (running/stopped), PID
 
 ---
 
 ## 🔍 Tool 2: winccoa_get_datapoints
 
-### Deutsch
+### German
 ```
 Finde alle Datapoints die "Example" im Namen haben
 ```
@@ -75,21 +75,21 @@ Show me all Pump datapoints
 List all datapoints in the system
 ```
 
-**Erwartetes Verhalten:**
-- Tool `winccoa_get_datapoints` wird aufgerufen
-- Pattern wird korrekt übergeben (ggf. mit Wildcards)
-- Copilot zeigt Liste der gefundenen Datapoints
-- Max 20 Ergebnisse angezeigt (+ "... and X more")
+**Expected behavior:**
+- Tool `winccoa_get_datapoints` is called
+- Pattern is passed correctly (including wildcards if needed)
+- Copilot shows the list of found datapoints
+- Max 20 results shown (+ "... and X more")
 
-**Bekanntes Problem:**
-- MCP Server findet manche Datapoints nicht (z.B. `sentron_3wa_01`)
-- Das ist ein MCP Server Problem, nicht Extension!
+**Known issue:**
+- The MCP server may not find some datapoints (e.g. `sentron_3wa_01`)
+- This is an MCP server issue, not an extension issue
 
 ---
 
 ## 📈 Tool 3: winccoa_get_value
 
-### Deutsch
+### German
 ```
 Was ist der aktuelle Wert von ExampleDP_Arg1.?
 ```
@@ -117,17 +117,17 @@ Show me the value of datapoint ExampleDP_Arg1.
 Get current value of ExampleDP_Arg1.
 ```
 
-**Erwartetes Verhalten:**
-- Tool `winccoa_get_value` wird aufgerufen
-- Copilot zeigt aktuellen Wert + Timestamp
-- Bei `.` am Ende: Alle Elemente werden gelesen
-- Bei spezifischem Element: Nur dieses Element
+**Expected behavior:**
+- Tool `winccoa_get_value` is called
+- Copilot shows current value + timestamp
+- If the datapoint ends with `.`, all elements are read
+- If a specific element is provided, only that element is read
 
 ---
 
 ## 🏗️ Tool 4: winccoa_get_dptypes
 
-### Deutsch
+### German
 ```
 Liste alle Datapoint Typen auf
 ```
@@ -155,17 +155,17 @@ What type definitions exist?
 Find DpTypes matching *Motor*
 ```
 
-**Erwartetes Verhalten:**
-- Tool `winccoa_get_dptypes` wird aufgerufen
-- Copilot zeigt Liste der Typen
-- Optional mit Elementen/Struktur
-- Max 20 Ergebnisse
+**Expected behavior:**
+- Tool `winccoa_get_dptypes` is called
+- Copilot shows the list of types
+- Optionally includes elements/structure
+- Max 20 results
 
 ---
 
 ## ℹ️ Tool 5: winccoa_get_manager_status
 
-### Deutsch
+### German
 ```
 Zeig mir Details zum REMUS Manager
 ```
@@ -187,16 +187,16 @@ What is the status of WCCOActrl manager?
 Give me info about the dist manager
 ```
 
-**Erwartetes Verhalten:**
-- Tool `winccoa_get_manager_status` wird aufgerufen
-- Copilot zeigt Details: Name, PID, Status, Start Mode
-- Bei nicht gefundenem Manager: Error Message
+**Expected behavior:**
+- Tool `winccoa_get_manager_status` is called
+- Copilot shows details: name, PID, status, start mode
+- If the manager is not found: returns a useful error message
 
 ---
 
-## 🔗 Kombinierte Abfragen (Multi-Tool)
+## 🔗 Combined queries (multi-tool)
 
-### Deutsch
+### German
 ```
 Zeig mir alle Manager und dann den Wert von ExampleDP_Arg1.
 ```
@@ -218,102 +218,101 @@ How many managers are running and what datapoint types exist?
 List all Pump datapoints and read the value of the first one
 ```
 
-**Erwartetes Verhalten:**
-- Copilot ruft mehrere Tools nacheinander auf
-- Antwort kombiniert Informationen aus beiden Calls
-- Reihenfolge logisch
+**Expected behavior:**
+- Copilot calls multiple tools sequentially
+- Response combines information from both calls
+- Order is logical
 
 ---
 
-## ❌ Negative Tests (sollten NICHT funktionieren)
+## ❌ Negative tests (should NOT work)
 
-### Falsche Tool-Wahl
+### Wrong tool choice
 ```
 Was ist das Wetter heute?
 ```
-→ Kein WinCC OA Tool verfügbar
+→ No WinCC OA tool is applicable
 
 ```
 Erstelle einen neuen Datapoint
 ```
-→ Kein create/write Tool verfügbar (read-only!)
+→ No create/write tool available (read-only)
 
-### Fehlende Parameter
+### Missing parameters
 ```
 Lies den Wert
 ```
-→ Welcher Datapoint? LLM sollte nachfragen
+→ Which datapoint? Copilot should ask a follow-up question
 
 ```
 Such nach Datapoints
 ```
-→ Welches Pattern? LLM könnte `*` verwenden
+→ Which pattern? Copilot might default to `*`
 
 ---
 
-## 🎯 Erfolgsmetriken
+## 🎯 Success metrics
 
-**Tool wird korrekt gewählt:**
-- ✅ Copilot identifiziert richtiges Tool
-- ✅ Pattern/Parameter werden korrekt extrahiert
-- ✅ Deutsch & Englisch funktionieren gleich gut
+**Tool is chosen correctly:**
+- ✅ Copilot identifies the correct tool
+- ✅ Pattern/parameters are extracted correctly
+- ✅ German and English prompts behave similarly
 
-**Tool wird NICHT gewählt:**
-- ⚠️ LLM erkennt Tool nicht (obwohl verfügbar)
-- ⚠️ LLM wählt falsches Tool
-- ⚠️ Parameter fehlen oder falsch
+**Tool is NOT chosen:**
+- ⚠️ Copilot does not use a tool even though one is available
+- ⚠️ Copilot chooses the wrong tool
+- ⚠️ Parameters are missing or incorrect
 
-**Fehlerbehandlung:**
-- ✅ Copilot zeigt sinnvolle Fehlermeldung
-- ✅ User bekommt Hinweis was zu tun ist
-- ✅ Bei Timeout: Retry oder Clear Error
-
----
-
-## 📝 Notizen für Tests
-
-1. **Logging aktivieren:**
-   - VS Code Output Panel: "WinCC OA MCP Server Extension"
-   - Logs zeigen: Tool-Calls, Parameter, Responses
-
-2. **MCP Server muss laufen:**
-   - Check Status Bar: ✅ Grünes Icon
-   - Falls ❌ Rot: `@winccoa /help` → sollte Fehler zeigen
-
-3. **Rate Limits:**
-   - Bei zu vielen Requests: "Upstream provider rate limit hit"
-   - Warten 1-2 Minuten, dann retry
-
-4. **Vergleich:**
-   - Test gleichen Prompt MIT `@winccoa /command` (manual)
-   - Vergleiche Ergebnisse: Sollten identisch sein
+**Error handling:**
+- ✅ Copilot shows a meaningful error message
+- ✅ User gets a clear next step
+- ✅ On timeout: suggests retry or how to clear the error
 
 ---
 
-## 🐛 Bekannte Probleme
+## 📝 Notes for testing
 
-1. **Datapoint nicht gefunden:**
-   - MCP Server Problem, nicht Extension
-   - Workaround: Vollständigen Namen mit System angeben
+1. **Enable logging:**
+   - VS Code Output panel: select "WinCC OA MCP Server" (or similarly named channel)
+   - Logs show: tool calls, parameters, responses
 
-2. **Tool wird nicht gewählt:**
-   - Prompt zu generisch ("zeig was")
-   - Lösung: Spezifischer formulieren ("zeig Manager")
+2. **MCP server must be running:**
+   - Check the status bar: connected indicator
+   - If disconnected: open the status bar menu and view logs / reconnect
 
-3. **Deutsch funktioniert schlechter:**
-   - LLM ist auf Englisch trainiert
-   - Englische Keywords hinzufügen in Prompt
+3. **Rate limits:**
+   - If too many requests: "Upstream provider rate limit hit"
+   - Wait 1-2 minutes, then retry
+
+4. **Consistency check:**
+   - Run the same prompt multiple times
+   - Results should be consistent (within expected runtime state changes)
 
 ---
 
-## ✅ Checkliste für kompletten Test
+## 🐛 Known issues
+
+1. **Datapoint not found:**
+   - MCP server issue, not the extension
+   - Workaround: use the full name including system prefix
+
+2. **Tool not chosen:**
+   - Prompt too generic ("show something")
+   - Solution: be more specific ("list managers")
+
+3. **German performs worse:**
+   - Some models perform best in English
+   - Add English keywords to the prompt if needed
+
+---
+
+## ✅ Full test checklist
 
 - [ ] Alle 5 Tools einzeln getestet (DE + EN)
 - [ ] Multi-Tool Abfragen funktionieren
 - [ ] Negative Tests schlagen fehl (korrekt)
 - [ ] Fehlerbehandlung zeigt sinnvolle Messages
 - [ ] Logs zeigen Tool-Calls korrekt
-- [ ] Vergleich mit `@winccoa /command` identisch
 - [ ] Rate Limits werden respektiert
 - [ ] MCP Server Connection stabil
 
